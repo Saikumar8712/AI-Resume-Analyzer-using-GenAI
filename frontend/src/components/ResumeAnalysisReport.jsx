@@ -1,7 +1,7 @@
 import { useState } from "react";
 import ScoreCard from "./ScoreCard.jsx";
 import SkillBadge from "./SkillBadge.jsx";
-import { pdfUrl } from "../api.js";
+import { pdfUrl, atsResumeUrl } from "../api.js";
 
 export default function ResumeAnalysisReport({ data }) {
   const [tab, setTab] = useState("need_to_improve"); // Default to Need to Improve or overview
@@ -18,6 +18,7 @@ export default function ResumeAnalysisReport({ data }) {
   const recommendations = data.recommendations || [];
   const questions = data.questions || [];
   const checks = data.checks || {};
+  const jobRecommendations = data.job_recommendations || [];
   const atsScore = data.ats_score ?? data.score ?? 0;
   const atsGrade = data.ats_grade || "A";
   const atsBreakdown = data.ats_breakdown || {};
@@ -32,6 +33,7 @@ export default function ResumeAnalysisReport({ data }) {
     { id: "need_to_improve", label: `⚡ Need to Improve (${needToImprove.length})`, badgeClass: "tab-badge-warn" },
     { id: "overview", label: `Overview & Matched (${matchedSkills.length})` },
     { id: "ats_improvements", label: `📋 ATS Resume Fixes (${resumeImprovements.length})` },
+    ...(jobRecommendations.length > 0 ? [{ id: "job_recommendations", label: `💼 Job Matches (${jobRecommendations.length})` }] : []),
     ...(bulletRewrites.length > 0 ? [{ id: "bullet_rewrites", label: `✨ Bullet Rewrites (${bulletRewrites.length})` }] : []),
     { id: "questions", label: `🎙️ Interview Prep (${questions.length})` },
   ];
@@ -212,9 +214,19 @@ export default function ResumeAnalysisReport({ data }) {
         {tab === "ats_improvements" && (
           <div className="ats-fixes-container">
             <div className="ats-summary-banner">
-              <div className="ats-score-display">
-                <span className="ats-badge-large">ATS Score: {atsScore}%</span>
-                <span className="ats-grade-tag">Rating: {atsGrade}</span>
+              <div className="ats-score-display flex-between">
+                <div>
+                  <span className="ats-badge-large">ATS Score: {atsScore}%</span>
+                  <span className="ats-grade-tag">Rating: {atsGrade}</span>
+                </div>
+                <a
+                  className="btn btn-download glow-btn"
+                  href={atsResumeUrl(data.id)}
+                  download={`ats-resume-${data.id}.pdf`}
+                  title="Download an ATS-compliant, single-column formatted version of your resume"
+                >
+                  📄 Download ATS-Friendly Resume (PDF)
+                </a>
               </div>
               <p className="ats-desc">
                 Based on parsing your extracted PDF document, here are specific structural and content improvements
@@ -316,6 +328,53 @@ export default function ResumeAnalysisReport({ data }) {
           </div>
         )}
 
+        {/* Dedicated Relevant Job Matches Tab */}
+        {tab === "job_recommendations" && (
+          <div className="need-to-improve-container">
+            <div className="section-intro-card">
+              <div className="intro-header flex-between">
+                <div>
+                  <h3 className="section-highlight-title">💼 Recommended Job Roles for Your Profile</h3>
+                  <p className="section-highlight-desc">
+                    Target roles aligned with your verified technical skills, core competencies, and career trajectory.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="need-to-improve-grid">
+              {jobRecommendations.map((job, idx) => (
+                <div key={idx} className="improve-skill-card">
+                  <div className="improve-card-top">
+                    <div className="skill-title-group">
+                      <span className="skill-name-badge">{job.title}</span>
+                      <span className="skill-status-tag">{job.match_score}% Skill Fit</span>
+                    </div>
+                    <span className="priority-pill priority-high">
+                      {job.match_level}
+                    </span>
+                  </div>
+
+                  <div className="improve-advice-box">
+                    <span className="advice-label">🎯 Why You Match:</span>
+                    <p className="advice-text">{job.reason}</p>
+                    {job.matching_skills && job.matching_skills.length > 0 && (
+                      <p className="advice-text" style={{ marginTop: "6px" }}>
+                        <b>Matching Strengths:</b> {job.matching_skills.join(", ")}
+                      </p>
+                    )}
+                    {job.growth_skills && job.growth_skills.length > 0 && (
+                      <p className="advice-text" style={{ marginTop: "4px" }}>
+                        <b>Growth Skills to Add:</b> {job.growth_skills.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 4. Interview Prep */}
         {tab === "questions" && (
           <div className="questions-content">
@@ -348,13 +407,23 @@ export default function ResumeAnalysisReport({ data }) {
         <p className="disclaimer-note">
           ℹ️ {data.disclaimer}
         </p>
-        <a
-          className="btn btn-download"
-          href={pdfUrl(data.id)}
-          download={`report-${data.id}.pdf`}
-        >
-          📥 Download Complete PDF Report
-        </a>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <a
+            className="btn btn-download glow-btn"
+            href={atsResumeUrl(data.id)}
+            download={`ats-resume-${data.id}.pdf`}
+            title="Download clean, single-column ATS-formatted resume"
+          >
+            📄 Download ATS-Friendly Resume
+          </a>
+          <a
+            className="btn btn-download"
+            href={pdfUrl(data.id)}
+            download={`report-${data.id}.pdf`}
+          >
+            📥 Download Complete Report
+          </a>
+        </div>
       </div>
     </article>
   );

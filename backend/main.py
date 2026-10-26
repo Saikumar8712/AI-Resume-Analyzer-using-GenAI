@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-import db, analyzer, ai
+import db, analyzer, ai, ats_resume
 
 MAX_MB = 5
 app = FastAPI(title="AI Resume Analyzer")
@@ -43,35 +43,69 @@ async def analyze(resume: UploadFile = File(...), job_description: str = Form(..
     if not (is_pdf or is_docx):
         raise HTTPException(400, "Upload a PDF or DOCX file.")
     data = await resume.read()
-    if len(data) > MAX_MB * 1024 * 1024: raise HTTPException(400, f"File is larger than {MAX_MB} MB.")
+    if len(data) == 0:
+        raise HTTPException(400, "The uploaded file is empty.")
+    if len(data) > MAX_MB * 1024 * 1024:
+        raise HTTPException(400, f"File is larger than {MAX_MB} MB.")
     jd_clean = job_description.strip()
-    if len(jd_clean) < 2: raise HTTPException(400, "Job description must be at least 2 characters.")
+    if len(jd_clean) < 2:
+        raise HTTPException(400, "Job description must be at least 2 characters.")
     try:
         if is_docx:
             text = analyzer.extract_docx_text(data)
         else:
             text = analyzer.extract_pdf_text(data)
+    except ValueError as ve:
+        raise HTTPException(400, str(ve))
     except Exception:
         doc_type = "DOCX" if is_docx else "PDF"
         raise HTTPException(400, f"Could not read this {doc_type}. It may be corrupted or password-protected.")
-    if len(text) < 100: raise HTTPException(400, "No readable text found. Scanned documents or image-only files are not supported; export a text-based PDF/DOCX.")
-    result = analyzer.analyze(text, job_description)
+    if len(text.strip()) < 50:
+        raise HTTPException(400, "No readable text found. Scanned documents or image-only files are not supported; export a text-based PDF/DOCX.")
+    result = analyzer.analyze(text, job_description, job_title=job_title)
     result["job_title"] = job_title
     fb = ai.gemini_feedback(text, job_description, result)
     result["mode"] = "ai" if fb else "basic"
     if fb:
-        result["summary"] = fb.get("summary", "")
-        if fb.get("need_to_improve"):
-            result["need_to_improve"] = fb.get("need_to_improve")
-        if fb.get("resume_improvements"):
-            result["resume_improvements"] = fb.get("resume_improvements")
-        result["recommendations"] = fb.get("recommendations") or result["recommendations"]
-        result["questions"] = fb.get("questions") or []
-        if fb.get("bullet_rewrites"):
-            result["bullet_rewrites"] = fb.get("bullet_rewrites")
+        result["summary"] = str(fb.get("summary", "")).strip()
+        if fb.get("need_to_improve") and isinstance(fb["need_to_improve"], list):
+            sanitized_improve = []
+            for item in fb["need_to_improve"]:
+                if isinstance(item, dict):
+                    sanitized_improve.append({
+                        "skill": str(item.get("skill", "")).strip(),
+                        "priority": str(item.get("priority", "High")).strip(),
+                        "suggestion": str(item.get("suggestion", "")).strip()
+                    })
+                elif isinstance(item, str) and item.strip():
+                    sanitized_improve.append({
+                        "skill": item.strip(),
+                        "priority": "High",
+                        "suggestion": f"Build hands-on experience and portfolio evidence for {item.strip()}."
+                    })
+            if sanitized_improve:
+                result["need_to_improve"] = sanitized_improve
+        if fb.get("resume_improvements") and isinstance(fb["resume_improvements"], list):
+            result["resume_improvements"] = [str(x).strip() for x in fb["resume_improvements"] if str(x).strip()]
+        if fb.get("recommendations") and isinstance(fb["recommendations"], list):
+            result["recommendations"] = [str(x).strip() for x in fb["recommendations"] if str(x).strip()]
+        if fb.get("questions") and isinstance(fb["questions"], list):
+            result["questions"] = [str(x).strip() for x in fb["questions"] if str(x).strip()]
+        if fb.get("bullet_rewrites") and isinstance(fb["bullet_rewrites"], list):
+            sanitized_rewrites = []
+            for rw in fb["bullet_rewrites"]:
+                if isinstance(rw, dict):
+                    orig = str(rw.get("original", "")).strip()
+                    imp = str(rw.get("improved", "")).strip()
+                    if orig and imp:
+                        sanitized_rewrites.append({"original": orig, "improved": imp})
+            if sanitized_rewrites:
+                result["bullet_rewrites"] = sanitized_rewrites
     if not result.get("questions"):
         result["questions"] = analyzer.basic_questions(result["missing_skills"], result["matched_skills"])
-    result["id"] = db.save(resume.filename, job_title, result)
+    saved_id = db.save(resume.filename, job_title, result)
+    result["id"] = saved_id
+    result["ats_resume_url"] = f"/api/report/{saved_id}/ats-resume"
     return result
 
 @app.get("/api/history")
@@ -81,11 +115,21 @@ def history(): return db.list_all()
 def one(i: int):
     r = db.get(i)
     if not r: raise HTTPException(404, "Analysis not found.")
-    return {**r["result"], "id": i}
+    return {**r["result"], "id": i, "ats_resume_url": f"/api/report/{i}/ats-resume"}
 
 @app.delete("/api/history/{i}")
 def remove(i: int):
-    db.delete(i); return {"deleted": i}
+    if not db.delete(i):
+        raise HTTPException(404, "Analysis not found.")
+    return {"deleted": i}
+
+@app.get("/api/report/{i}/ats-resume")
+def ats_resume_pdf(i: int):
+    r = db.get(i)
+    if not r: raise HTTPException(404, "Analysis not found.")
+    buf = ats_resume.generate_ats_resume(r)
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=ats-resume-{i}.pdf"})
 
 @app.get("/api/report/{i}/pdf")
 def pdf(i: int):
@@ -119,9 +163,12 @@ def pdf(i: int):
     need_to_improve = x.get("need_to_improve", [])
     if need_to_improve:
         for item in need_to_improve:
-            s_name = html.escape(str(item.get("skill", "")))
-            s_sug = html.escape(str(item.get("suggestion", "")))
-            flow.append(Paragraph(f"• <b>{s_name}</b>: {s_sug}", st["BodyText"]))
+            if isinstance(item, dict):
+                s_name = html.escape(str(item.get("skill", "")))
+                s_sug = html.escape(str(item.get("suggestion", "")))
+                flow.append(Paragraph(f"• <b>{s_name}</b>: {s_sug}", st["BodyText"]))
+            elif isinstance(item, str):
+                flow.append(Paragraph(f"• {html.escape(item)}", st["BodyText"]))
     else:
         flow.append(Paragraph("None - Candidate demonstrates all listed required skills!", st["BodyText"]))
     flow.append(Spacer(1, 8))
@@ -147,10 +194,11 @@ def pdf(i: int):
     if rewrites:
         flow.append(Paragraph("AI High-Impact Bullet Rewrites", st["Heading3"]))
         for rw in rewrites:
-            orig = html.escape(str(rw.get("original", "")))
-            imp = html.escape(str(rw.get("improved", "")))
-            flow.append(Paragraph(f"• <b>Original:</b> <i>{orig}</i><br/>&nbsp;&nbsp;<b>Rewrite:</b> {imp}", st["BodyText"]))
-            flow.append(Spacer(1, 4))
+            if isinstance(rw, dict):
+                orig = html.escape(str(rw.get("original", "")))
+                imp = html.escape(str(rw.get("improved", "")))
+                flow.append(Paragraph(f"• <b>Original:</b> <i>{orig}</i><br/>&nbsp;&nbsp;<b>Rewrite:</b> {imp}", st["BodyText"]))
+                flow.append(Spacer(1, 4))
         flow.append(Spacer(1, 4))
 
     # 6. Tailored Interview Practice Questions
@@ -159,7 +207,11 @@ def pdf(i: int):
     if questions:
         flow += [Paragraph(f"{idx+1}. " + html.escape(str(q)), st["BodyText"]) for idx, q in enumerate(questions)]
 
-    doc.build(flow); buf.seek(0)
+    try:
+        doc.build(flow)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to generate PDF report: {e}")
+    buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename=report-{i}.pdf"})
 

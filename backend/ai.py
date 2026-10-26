@@ -6,7 +6,7 @@ def gemini_feedback(resume: str, jd: str, result: dict):
     if not key:
         return None
     model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
-    prompt = f"""You are an elite career coach and ATS optimization specialist. Use ONLY facts in the resume. Never invent qualifications.
+    prompt = f"""You are an elite career coach and ATS optimization specialist. Use ONLY facts explicitly stated in the resume. Never invent qualifications, credentials, metrics, percentages, or achievements.
 Matched skills: {result.get('matched_skills', [])}.
 Missing skills that candidate needs to improve: {result.get('missing_skills', [])}.
 Target role: {result.get('job_title', 'Target Role')}.
@@ -32,8 +32,8 @@ Return strictly valid JSON with this exact schema:
   ],
   "bullet_rewrites": [
     {{
-      "original": "1-2 weak or vague bullet points/sentences from the resume that lack metrics",
-      "improved": "Measurable, high-impact rewrite with strong action verbs, numbers, and business value"
+      "original": "1-2 weak or unquantified bullet points from the resume",
+      "improved": "High-impact rewrite using strong action verbs based strictly on resume facts. NEVER fabricate fake numbers or unverified statistics; use brackets like [X]% or [metric] if quantification needs candidate input."
     }}
   ]
 }}
@@ -42,32 +42,43 @@ JOB DESCRIPTION:
 
 RESUME:
 {resume[:6000]}"""
+    default_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
     models_to_try = [
-        os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-flash-latest"
+        default_model,
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
     ]
-    models_to_try = list(dict.fromkeys(models_to_try))
+    models_to_try = [m.replace("models/", "") for m in dict.fromkeys(models_to_try)]
 
     for model in models_to_try:
         try:
             r = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                headers={"x-goog-api-key": key}, timeout=25,
+                headers={"x-goog-api-key": key}, timeout=15,
                 json={"contents": [{"parts": [{"text": prompt}]}],
                       "generationConfig": {"responseMimeType": "application/json"}})
             if r.status_code != 200:
                 print(f"Gemini {model} returned {r.status_code}: {r.text[:120]}")
+                # If key is invalid or unauthorized, avoid slow retries
+                if r.status_code in (400, 401, 403) and ("API_KEY_INVALID" in r.text or "key not valid" in r.text.lower()):
+                    return None
                 continue
             candidates = r.json().get("candidates", [])
             if not candidates:
                 continue
             text = candidates[0]["content"]["parts"][0]["text"].strip()
-            # Clean potential markdown fences
-            if text.startswith("```"):
+            # Robust JSON extraction from response text
+            match = re.search(r"\{[\s\S]*\}", text)
+            if match:
+                text = match.group(0)
+            elif text.startswith("```"):
                 text = re.sub(r"^```(?:json)?\s*", "", text)
                 text = re.sub(r"\s*```$", "", text)
-            return json.loads(text.strip())
+            parsed = json.loads(text.strip())
+            if isinstance(parsed, dict):
+                return parsed
         except Exception as e:
             print(f"Gemini error with {model}:", e)
             continue

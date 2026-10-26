@@ -1,11 +1,11 @@
 # skill -> aliases found in text (all lowercase)
 SKILLS = {
- "Python": ["python"], "SQL": ["sql", "mysql", "postgresql", "postgres", "sqlite"],
+ "Python": ["python"], "SQL": ["sql", "mysql", "postgresql", "postgres", "sqlite", "oracle", "sql server", "mssql"],
  "REST APIs": ["rest api", "rest apis", "restful", "api development"],
  "FastAPI": ["fastapi"], "Flask": ["flask"], "Django": ["django"],
  "JavaScript": ["javascript", "js", "es6"], "TypeScript": ["typescript"],
  "React": ["react", "reactjs", "react.js"], "Node.js": ["node.js", "nodejs", "node"],
- "HTML/CSS": ["html", "css", "tailwind"], "Git": ["git", "github", "gitlab"],
+ "HTML/CSS": ["html", "css", "tailwind"], "Git": ["git", "github", "gitlab", "bitbucket"],
  "Docker": ["docker", "containers"], "Kubernetes": ["kubernetes", "k8s"],
  "AWS": ["aws", "amazon web services"], "Azure": ["azure"], "GCP": ["gcp", "google cloud"],
  "Unit testing": ["unit test", "unit testing", "pytest", "jest", "unittest", "junit"],
@@ -14,7 +14,7 @@ SKILLS = {
  "Deep learning": ["deep learning", "tensorflow", "pytorch", "keras"],
  "NLP": ["nlp", "natural language processing"], "Pandas": ["pandas", "numpy"],
  "Data structures": ["data structures", "algorithms", "dsa"],
- "Java": ["java"], "C++": ["c++"], "MongoDB": ["mongodb", "nosql"],
+ "Java": ["java"], "C++": ["c++"], "C#": ["c#", "csharp", "c-sharp", ".net", "dotnet", "asp.net"], "MongoDB": ["mongodb", "nosql"],
  "Agile": ["agile", "scrum"], "Communication": ["communication", "teamwork"],
  "Next.js": ["next.js", "nextjs", "next js"], "Vue.js": ["vue", "vue.js", "vuejs"],
  "Angular": ["angular", "angularjs"], "Spring Boot": ["spring boot", "springboot", "spring framework"],

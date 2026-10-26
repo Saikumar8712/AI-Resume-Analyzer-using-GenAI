@@ -17,3 +17,4 @@ export const getHistory = () => fetch(`${API_BASE_URL}/api/history`).then(handle
 export const getAnalysis = (id) => fetch(`${API_BASE_URL}/api/history/${id}`).then(handle);
 export const deleteAnalysis = (id) => fetch(`${API_BASE_URL}/api/history/${id}`, { method: "DELETE" }).then(handle);
 export const pdfUrl = (id) => `${API_BASE_URL}/api/report/${id}/pdf`;
+export const atsResumeUrl = (id) => `${API_BASE_URL}/api/report/${id}/ats-resume`;
