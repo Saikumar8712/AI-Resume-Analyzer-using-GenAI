@@ -29,6 +29,12 @@ Return strictly valid JSON with this exact schema:
   ],
   "questions": [
     "8 rigorous interview questions (both technical deep-dives on matched skills and exploratory questions on missing skills)."
+  ],
+  "bullet_rewrites": [
+    {{
+      "original": "1-2 weak or vague bullet points/sentences from the resume that lack metrics",
+      "improved": "Measurable, high-impact rewrite with strong action verbs, numbers, and business value"
+    }}
   ]
 }}
 JOB DESCRIPTION:
@@ -37,7 +43,8 @@ JOB DESCRIPTION:
 RESUME:
 {resume[:6000]}"""
     models_to_try = [
-        os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash",
+        os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-flash-latest"
     ]
     models_to_try = list(dict.fromkeys(models_to_try))
@@ -46,7 +53,7 @@ RESUME:
         try:
             r = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                headers={"x-goog-api-key": key}, timeout=8,
+                headers={"x-goog-api-key": key}, timeout=25,
                 json={"contents": [{"parts": [{"text": prompt}]}],
                       "generationConfig": {"responseMimeType": "application/json"}})
             if r.status_code != 200:

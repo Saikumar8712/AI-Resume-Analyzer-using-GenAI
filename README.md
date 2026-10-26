@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # AI Resume Analyzer & Interview Prep
 
 Upload a PDF resume + paste a job description. Get an explainable match estimate, matched/missing skills, recommendations, interview questions, saved history and a PDF report.
@@ -34,6 +33,3 @@ Keep `.env` out of Git. In AI mode, resume text is sent to Google; review Gemini
 
 ## Ideas to extend
 Docker compose, pytest tests, deployment (Render + Vercel), DOCX upload, auth.
-=======
-# AI-Resume-Analyzer-using-GenAI
->>>>>>> 594253c7c6af709acb87216a4daf1bd98b1922c5

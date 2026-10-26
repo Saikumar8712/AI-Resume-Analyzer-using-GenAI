@@ -14,6 +14,7 @@ export default function ResumeAnalysisReport({ data }) {
   const extraSkills = data.extra_skills || [];
   const needToImprove = data.need_to_improve || [];
   const resumeImprovements = data.resume_improvements || [];
+  const bulletRewrites = data.bullet_rewrites || [];
   const recommendations = data.recommendations || [];
   const questions = data.questions || [];
   const checks = data.checks || {};
@@ -31,6 +32,7 @@ export default function ResumeAnalysisReport({ data }) {
     { id: "need_to_improve", label: `⚡ Need to Improve (${needToImprove.length})`, badgeClass: "tab-badge-warn" },
     { id: "overview", label: `Overview & Matched (${matchedSkills.length})` },
     { id: "ats_improvements", label: `📋 ATS Resume Fixes (${resumeImprovements.length})` },
+    ...(bulletRewrites.length > 0 ? [{ id: "bullet_rewrites", label: `✨ Bullet Rewrites (${bulletRewrites.length})` }] : []),
     { id: "questions", label: `🎙️ Interview Prep (${questions.length})` },
   ];
 
@@ -265,6 +267,52 @@ export default function ResumeAnalysisReport({ data }) {
                 ))}
               </ul>
             </section>
+          </div>
+        )}
+
+        {/* Dedicated AI Bullet Rewrites Tab */}
+        {tab === "bullet_rewrites" && (
+          <div className="bullet-rewrites-container">
+            <div className="section-intro-card">
+              <div className="intro-header flex-between">
+                <div>
+                  <h3 className="section-highlight-title">✨ AI High-Impact Bullet Point Rewrites</h3>
+                  <p className="section-highlight-desc">
+                    Transform weak or unquantified resume bullet points into high-impact, results-driven achievements with measurable impact.
+                  </p>
+                </div>
+                {bulletRewrites.length > 0 && (
+                  <button
+                    type="button"
+                    className="copy-btn glow-btn"
+                    onClick={() =>
+                      copyToClipboard(
+                        bulletRewrites.map((b) => `Original: ${b.original}\nRewrite: ${b.improved}`).join("\n\n"),
+                        "bullet_rewrites"
+                      )
+                    }
+                  >
+                    {copiedSection === "bullet_rewrites" ? "✓ Copied Rewrites!" : "📋 Copy Rewrites"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="rewrites-grid">
+              {bulletRewrites.map((item, idx) => (
+                <div key={idx} className="rewrite-card">
+                  <div className="rewrite-col rewrite-original">
+                    <span className="rewrite-tag original-tag">⚠️ Original (Weak / Unquantified)</span>
+                    <p className="rewrite-text">{item.original}</p>
+                  </div>
+                  <div className="rewrite-divider">➔</div>
+                  <div className="rewrite-col rewrite-improved">
+                    <span className="rewrite-tag improved-tag">🚀 AI High-Impact Rewrite</span>
+                    <p className="rewrite-text">{item.improved}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

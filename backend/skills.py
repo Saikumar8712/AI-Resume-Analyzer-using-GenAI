@@ -16,4 +16,11 @@ SKILLS = {
  "Data structures": ["data structures", "algorithms", "dsa"],
  "Java": ["java"], "C++": ["c++"], "MongoDB": ["mongodb", "nosql"],
  "Agile": ["agile", "scrum"], "Communication": ["communication", "teamwork"],
+ "Next.js": ["next.js", "nextjs", "next js"], "Vue.js": ["vue", "vue.js", "vuejs"],
+ "Angular": ["angular", "angularjs"], "Spring Boot": ["spring boot", "springboot", "spring framework"],
+ "Go": ["golang", "go language"], "Rust": ["rust"], "GraphQL": ["graphql"],
+ "Redis": ["redis", "caching"], "Kafka": ["kafka", "message queue", "rabbitmq"],
+ "Tailwind CSS": ["tailwind", "tailwindcss"], "Microservices": ["microservices", "microservice"],
+ "Flutter": ["flutter", "dart"], "DevOps": ["devops", "terraform", "ansible"],
+ "System Design": ["system design", "distributed systems", "high availability"],
 }

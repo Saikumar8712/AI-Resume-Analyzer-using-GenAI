@@ -1,4 +1,4 @@
-import re
+import re, io
 try:
     import pymupdf as fitz
 except ImportError:
@@ -12,6 +12,20 @@ def extract_pdf_text(data: bytes) -> str:
         if doc.is_encrypted:
             doc.authenticate("")
         return "\n".join(p.get_text() for p in doc).strip()
+
+def extract_docx_text(data: bytes) -> str:
+    try:
+        import docx
+        doc = docx.Document(io.BytesIO(data))
+        text = [p.text for p in doc.paragraphs if p.text]
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.text.strip():
+                        text.append(cell.text.strip())
+        return "\n".join(text).strip()
+    except Exception as e:
+        raise ValueError(f"Could not read DOCX file: {e}")
 
 def find_skills(text: str) -> set:
     t = " " + text.lower() + " "
@@ -62,7 +76,21 @@ SKILL_SUGGESTIONS = {
     "Data structures": "Demonstrate algorithm design, time/space complexity optimization, and clean data modeling in projects.",
     "Linux": "State practical Linux command-line, shell scripting (Bash), and system service configuration experience.",
     "Agile": "Highlight participation in Agile/Scrum ceremonies (sprint planning, daily standups, retrospectives).",
-    "Communication": "Emphasize cross-functional team collaboration, technical documentation, and stakeholder presentations."
+    "Communication": "Emphasize cross-functional team collaboration, technical documentation, and stakeholder presentations.",
+    "Next.js": "Highlight experience with Server-Side Rendering (SSR), Static Site Generation (SSG), and Next.js App Router.",
+    "Vue.js": "Showcase Vue 3 projects using Composition API, Pinia state management, and Vue Router.",
+    "Angular": "Demonstrate Angular components, RxJS observables, dependency injection, and TypeScript architecture.",
+    "Spring Boot": "Showcase Java enterprise microservices with Spring Boot, Spring Security, JPA/Hibernate, and Maven/Gradle.",
+    "Go": "Feature concurrent backend services built in Go leveraging goroutines, channels, and standard HTTP libraries.",
+    "Rust": "Demonstrate memory-safe, high-performance systems programming or CLI tools built with Rust and Cargo.",
+    "GraphQL": "Design schema definitions, queries, mutations, and resolvers with Apollo or GraphQL yoga.",
+    "Redis": "Demonstrate caching strategies, pub/sub messaging, session storage, and latency reduction with Redis.",
+    "Kafka": "Highlight event-driven architecture, distributed stream processing, and producer/consumer pipelines with Apache Kafka.",
+    "Tailwind CSS": "Showcase responsive and utility-first UI styling with custom design tokens and Tailwind CSS.",
+    "Microservices": "Explain microservice architecture patterns: API gateways, service discovery, distributed tracing, and fault tolerance.",
+    "Flutter": "Build cross-platform mobile apps for iOS and Android using Flutter widgets, state management (Bloc/Provider), and Dart.",
+    "DevOps": "Highlight infrastructure as code (Terraform), container orchestration, and automated CI/CD deployment pipelines.",
+    "System Design": "Demonstrate scalable system design principles: caching, database sharding, load balancing, and high availability."
 }
 
 def calculate_ats_score(text: str, checks: dict) -> dict:

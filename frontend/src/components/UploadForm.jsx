@@ -25,8 +25,9 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
 
   const pick = (f) => {
     if (!f) return;
-    if (!f.name.toLowerCase().endsWith(".pdf")) {
-      return setErr("Please upload a valid PDF file.");
+    const nameLower = f.name.toLowerCase();
+    if (!nameLower.endsWith(".pdf") && !nameLower.endsWith(".docx")) {
+      return setErr("Please upload a valid PDF or Word (.docx) file.");
     }
     if (f.size > 5 * 1024 * 1024) {
       return setErr("File size exceeds 5 MB limit.");
@@ -65,10 +66,11 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
 
   const submit = (e) => {
     e.preventDefault();
-    if (!file) return setErr("Upload your resume as a PDF file.");
-    if (jd.trim().length < 50) return setErr(`Job description is too short (${jd.trim().length}/50 characters required).`);
+    if (!file) return setErr("Upload your resume as a PDF or Word (.docx) file.");
+    const jdClean = jd.trim();
+    if (jdClean.length < 2) return setErr("Job description is required (at least 2 characters).");
     setErr("");
-    onSubmit(file, jd.trim(), title.trim() || "Target Role");
+    onSubmit(file, jdClean, title.trim() || "Target Role");
   };
 
   const loadSample = (sample) => {
@@ -106,7 +108,7 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
           onChange={(e) => pick(e.target.files?.[0])}
           style={{ display: "none" }}
         />
@@ -128,9 +130,9 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
           ) : (
             <div>
               <p className="drop-prompt">
-                <strong>Click to browse</strong> or drag & drop PDF resume
+                <strong>Click to browse</strong> or drag & drop PDF / Word (.docx) resume
               </p>
-              <p className="drop-sub">PDF up to 5 MB</p>
+              <p className="drop-sub">PDF or DOCX up to 5 MB</p>
             </div>
           )}
         </div>
@@ -149,8 +151,8 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
       <label className="field-group">
         <div className="field-header">
           <span className="field-label">Job Description</span>
-          <span className={`char-counter ${jd.trim().length < 50 ? "warn" : "ok"}`}>
-            {jd.trim().length} / 50 min chars
+          <span className={`char-counter ${jd.trim().length < 2 ? "warn" : "ok"}`}>
+            {jd.trim().length}
           </span>
         </div>
         <textarea

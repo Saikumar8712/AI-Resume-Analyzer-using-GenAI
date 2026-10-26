@@ -31,16 +31,30 @@ def health():
 
 @app.post("/api/analyze")
 async def analyze(resume: UploadFile = File(...), job_description: str = Form(...), job_title: str = Form("Target role")):
-    if resume.content_type != "application/pdf" and not resume.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Upload a PDF file.")
+    filename_lower = (resume.filename or "").lower()
+    is_pdf = resume.content_type == "application/pdf" or filename_lower.endswith(".pdf")
+    is_docx = (
+        resume.content_type in [
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword"
+        ]
+        or filename_lower.endswith(".docx")
+    )
+    if not (is_pdf or is_docx):
+        raise HTTPException(400, "Upload a PDF or DOCX file.")
     data = await resume.read()
     if len(data) > MAX_MB * 1024 * 1024: raise HTTPException(400, f"File is larger than {MAX_MB} MB.")
-    if len(job_description.strip()) < 50: raise HTTPException(400, "Paste a longer job description (at least 50 characters).")
+    jd_clean = job_description.strip()
+    if len(jd_clean) < 2: raise HTTPException(400, "Job description must be at least 2 characters.")
     try:
-        text = analyzer.extract_pdf_text(data)
+        if is_docx:
+            text = analyzer.extract_docx_text(data)
+        else:
+            text = analyzer.extract_pdf_text(data)
     except Exception:
-        raise HTTPException(400, "Could not read this PDF. It may be corrupted or password-protected.")
-    if len(text) < 100: raise HTTPException(400, "No readable text found. Scanned PDFs are not supported; export a text-based PDF.")
+        doc_type = "DOCX" if is_docx else "PDF"
+        raise HTTPException(400, f"Could not read this {doc_type}. It may be corrupted or password-protected.")
+    if len(text) < 100: raise HTTPException(400, "No readable text found. Scanned documents or image-only files are not supported; export a text-based PDF/DOCX.")
     result = analyzer.analyze(text, job_description)
     result["job_title"] = job_title
     fb = ai.gemini_feedback(text, job_description, result)
@@ -53,6 +67,8 @@ async def analyze(resume: UploadFile = File(...), job_description: str = Form(..
             result["resume_improvements"] = fb.get("resume_improvements")
         result["recommendations"] = fb.get("recommendations") or result["recommendations"]
         result["questions"] = fb.get("questions") or []
+        if fb.get("bullet_rewrites"):
+            result["bullet_rewrites"] = fb.get("bullet_rewrites")
     if not result.get("questions"):
         result["questions"] = analyzer.basic_questions(result["missing_skills"], result["matched_skills"])
     result["id"] = db.save(resume.filename, job_title, result)
@@ -126,7 +142,18 @@ def pdf(i: int):
         flow += [Paragraph("• " + html.escape(str(r_item)), st["BodyText"]) for r_item in recs]
     flow.append(Spacer(1, 8))
 
-    # 5. Tailored Interview Practice Questions
+    # 5. High-Impact Bullet Point Rewrites
+    rewrites = x.get("bullet_rewrites", [])
+    if rewrites:
+        flow.append(Paragraph("AI High-Impact Bullet Rewrites", st["Heading3"]))
+        for rw in rewrites:
+            orig = html.escape(str(rw.get("original", "")))
+            imp = html.escape(str(rw.get("improved", "")))
+            flow.append(Paragraph(f"• <b>Original:</b> <i>{orig}</i><br/>&nbsp;&nbsp;<b>Rewrite:</b> {imp}", st["BodyText"]))
+            flow.append(Spacer(1, 4))
+        flow.append(Spacer(1, 4))
+
+    # 6. Tailored Interview Practice Questions
     flow.append(Paragraph("Targeted Practice Interview Questions", st["Heading3"]))
     questions = x.get("questions", [])
     if questions:
