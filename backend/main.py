@@ -15,14 +15,24 @@ MAX_MB = 5
 app = FastAPI(title="AI Resume Analyzer")
 
 cors_origins = [
-    os.getenv("FRONTEND_ORIGIN", "http://localhost:5173").rstrip("/"),
+    os.getenv("FRONTEND_ORIGIN", "").rstrip("/"),
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
-app.add_middleware(CORSMiddleware, allow_origins=list(set(cors_origins)),
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+cors_origins = [o for o in cors_origins if o]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins if cors_origins else ["*"],
+    allow_origin_regex=r"https?://.*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 db.init()
 
 @app.get("/api/health")
