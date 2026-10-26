@@ -139,11 +139,14 @@
 }
 
 /* Base Styles */
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease, box-shadow 0.25s ease;
+}
+
+html {
+  overflow-y: scroll;
 }
 
 body {
@@ -155,15 +158,28 @@ body {
   color: var(--text-main);
   line-height: 1.6;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea, a, .tab-btn, .chip-btn {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* App Container */
 .app-container {
   max-width: 1440px;
+  width: 100%;
   margin: 0 auto;
   padding: 1.25rem 2rem 3rem;
   position: relative;
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 0.75rem 1rem 2rem;
+  }
 }
 
 /* Header & Navigation */
@@ -244,6 +260,19 @@ body {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+@media (max-width: 860px) {
+  .top-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+  .nav-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
 
 /* Dedicated Backend Server Badge */
@@ -385,14 +414,19 @@ body {
 /* Layout Grid */
 .layout {
   display: grid;
-  grid-template-columns: 420px 1fr;
-  gap: 2rem;
+  grid-template-columns: 400px minmax(0, 1fr);
+  gap: 1.75rem;
   align-items: start;
+}
+
+.sidebar-col, .main-col {
+  min-width: 0;
 }
 
 @media (max-width: 1040px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
   }
 }
 
@@ -407,11 +441,10 @@ body {
   box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
 }
 
 .panel:hover {
-  transform: translateY(-2px);
   border-color: var(--border-hover);
   background: var(--surface-elevated);
   box-shadow: 0 16px 36px -4px rgba(6, 182, 212, 0.12), 0 4px 14px -2px rgba(15, 23, 42, 0.06);
@@ -1104,9 +1137,14 @@ body {
   background: var(--border-accent-gradient);
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1040px) {
   .score-card-advanced {
     flex-direction: column;
+    gap: 1.25rem;
+  }
+  .scores-dual-container {
+    justify-content: center;
+    width: 100%;
   }
 }
 
@@ -1115,6 +1153,7 @@ body {
   gap: 1.5rem;
   align-items: center;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 520px) {
