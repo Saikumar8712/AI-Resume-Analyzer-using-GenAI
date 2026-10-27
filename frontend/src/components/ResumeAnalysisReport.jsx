@@ -18,6 +18,7 @@ export default function ResumeAnalysisReport({ data }) {
   }, [data?.id]);
 
   if (!data) return null;
+  const targetId = data?.id || 1;
 
   const matchedSkills = data.matched_skills || [];
   const partiallyMatched = data.partially_matched_skills || [];
@@ -303,9 +304,18 @@ export default function ResumeAnalysisReport({ data }) {
                     100% Scale
                   </button>
                   <a
+                    className="btn btn-secondary glow-btn"
+                    href={atsResumeUrl(targetId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open 1-page ATS resume in a new browser tab"
+                  >
+                    ↗ Open in Tab
+                  </a>
+                  <a
                     className="btn btn-download glow-btn"
-                    href={atsResumeUrl(data.id)}
-                    download={`ats-resume-${data.id}.pdf`}
+                    href={`${atsResumeUrl(targetId)}?download=true`}
+                    download={`ats-resume-${targetId}.pdf`}
                     title="Download exact 1-page ATS resume"
                   >
                     📄 Download 1-Page Resume PDF
@@ -350,12 +360,26 @@ export default function ResumeAnalysisReport({ data }) {
 
             {/* Responsive PDF Viewer Frame */}
             <div className={`resume-frame-wrapper scale-${previewScale}`}>
-              <iframe
-                title="1-Page ATS Resume PDF Preview"
-                src={atsResumeUrl(data.id)}
+              <object
+                data={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
+                type="application/pdf"
                 className="resume-pdf-iframe"
-                loading="lazy"
-              />
+                aria-label="1-Page ATS Resume PDF Preview"
+              >
+                <iframe
+                  title="1-Page ATS Resume PDF Preview"
+                  src={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
+                  className="resume-pdf-iframe"
+                  loading="lazy"
+                >
+                  <div className="pdf-fallback-msg" style={{ padding: "20px", textAlign: "center", color: "#fff" }}>
+                    <p>PDF preview is ready.</p>
+                    <a className="btn btn-download" href={atsResumeUrl(targetId)} target="_blank" rel="noopener noreferrer">
+                      Click to View / Download 1-Page Resume PDF
+                    </a>
+                  </div>
+                </iframe>
+              </object>
             </div>
           </div>
         )}
@@ -580,22 +604,35 @@ export default function ResumeAnalysisReport({ data }) {
           <button
             type="button"
             className="btn btn-secondary glow-btn"
-            onClick={() => setTab("resume_preview")}
+            onClick={() => {
+              setTab("resume_preview");
+              const el = document.querySelector(".report-tabs-nav");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
           >
             👁️ Preview 1-Page Resume
           </button>
           <a
+            className="btn btn-secondary glow-btn"
+            href={atsResumeUrl(targetId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open 1-Page ATS resume in a new browser tab"
+          >
+            ↗ Open in Tab
+          </a>
+          <a
             className="btn btn-download glow-btn"
-            href={atsResumeUrl(data.id)}
-            download={`ats-resume-${data.id}.pdf`}
+            href={`${atsResumeUrl(targetId)}?download=true`}
+            download={`ats-resume-${targetId}.pdf`}
             title="Download clean, single-column ATS-formatted resume"
           >
             📄 Download 1-Page Resume
           </a>
           <a
             className="btn btn-download"
-            href={pdfUrl(data.id)}
-            download={`report-${data.id}.pdf`}
+            href={`${pdfUrl(targetId)}?download=true`}
+            download={`report-${targetId}.pdf`}
           >
             📥 Download Complete Report
           </a>

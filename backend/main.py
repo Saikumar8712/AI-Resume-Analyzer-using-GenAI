@@ -137,17 +137,32 @@ def remove(i: int):
     return {"deleted": i}
 
 @app.get("/api/report/{i}/ats-resume")
-def ats_resume_pdf(i: int):
+def ats_resume_pdf(i: int, download: bool = False):
     r = db.get(i)
-    if not r: raise HTTPException(404, "Analysis not found.")
+    if not r:
+        # Fallback to the latest record if id was removed or out-of-sync
+        items = db.list_all()
+        if items:
+            r = db.get(items[0]["id"])
+    if not r:
+        raise HTTPException(404, "Analysis not found. Please analyze a resume first.")
     buf = ats_resume.generate_ats_resume(r)
-    return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=ats-resume-{i}.pdf"})
+    disposition = "attachment" if download else "inline"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"{disposition}; filename=ats-resume-{i}.pdf"}
+    )
 
 @app.get("/api/report/{i}/validation")
 def pdf_validation(i: int):
     r = db.get(i)
-    if not r: raise HTTPException(404, "Analysis not found.")
+    if not r:
+        items = db.list_all()
+        if items:
+            r = db.get(items[0]["id"])
+    if not r:
+        raise HTTPException(404, "Analysis not found. Please analyze a resume first.")
     import one_page_ats_resume
     buf = ats_resume.generate_ats_resume(r)
     parsed = one_page_ats_resume.extract_resume_sections(r.get("result", {}).get("_raw_text", ""))
@@ -155,9 +170,14 @@ def pdf_validation(i: int):
     return val_report
 
 @app.get("/api/report/{i}/pdf")
-def pdf(i: int):
+def pdf(i: int, download: bool = False):
     r = db.get(i)
-    if not r: raise HTTPException(404, "Analysis not found.")
+    if not r:
+        items = db.list_all()
+        if items:
+            r = db.get(items[0]["id"])
+    if not r:
+        raise HTTPException(404, "Analysis not found. Please analyze a resume first.")
     x, st = r["result"], getSampleStyleSheet()
     buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
     escaped_title = html.escape(str(r.get('job_title', 'Resume Analysis')))
@@ -250,6 +270,7 @@ def pdf(i: int):
     except Exception as e:
         raise HTTPException(500, f"Failed to generate PDF report: {e}")
     buf.seek(0)
+    disposition = "attachment" if download else "inline"
     return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=report-{i}.pdf"})
+                             headers={"Content-Disposition": f"{disposition}; filename=report-{i}.pdf"})
 
