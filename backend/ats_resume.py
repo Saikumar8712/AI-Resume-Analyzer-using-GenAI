@@ -38,7 +38,14 @@ def generate_ats_resume(record: dict) -> io.BytesIO:
     - Clear standard section headings
     - Action-verb bullets and quantified achievement highlights
     - Standard machine-readable typography and margins
+    - Guarantees exactly one A4 page with dynamic budget fitting
     """
+    try:
+        import one_page_ats_resume
+        return one_page_ats_resume.generate_exact_one_page_resume(record)
+    except Exception as e:
+        print("one_page_ats_resume fallback triggered:", e)
+
     result = record.get("result", {})
     job_title = record.get("job_title") or result.get("job_title") or "Target Role"
     resume_text = result.get("_raw_text", "")

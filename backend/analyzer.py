@@ -150,7 +150,19 @@ JOB_ROLE_CATALOG = [
     }
 ]
 
-def recommend_jobs(all_skills: set, target_role: str = "") -> list:
+def recommend_jobs(all_skills: set, target_role: str = "", resume_text: str = "", job_description: str = "") -> list:
+    try:
+        import job_matching_engine
+        return job_matching_engine.match_jobs(
+            candidate_skills=all_skills,
+            resume_text=resume_text,
+            target_role=target_role,
+            job_description=job_description,
+            min_count=10
+        )
+    except Exception as e:
+        print("job_matching_engine fallback triggered:", e)
+
     recommendations = []
     t_role_lower = (target_role or "").lower()
 
@@ -177,7 +189,7 @@ def recommend_jobs(all_skills: set, target_role: str = "") -> list:
             })
 
     recommendations.sort(key=lambda r: r["match_score"], reverse=True)
-    return recommendations[:4]
+    return recommendations
 
 def calculate_ats_score(text: str, checks: dict, jd: str = "", job_title: str = "") -> dict:
     t = text.lower()
@@ -335,7 +347,7 @@ def analyze(resume: str, jd: str, job_title: str = "Target role") -> dict:
     ats_data = calculate_ats_score(resume, checks, jd=jd, job_title=job_title)
     resume_improvements = generate_resume_improvements(resume, checks, ats_data)
     need_to_improve = build_need_to_improve(missing)
-    job_recs = recommend_jobs(r_sk | j_sk, target_role=job_title)
+    job_recs = recommend_jobs(r_sk | j_sk, target_role=job_title, resume_text=resume, job_description=jd)
 
     recs = []
     if missing:

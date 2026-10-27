@@ -368,6 +368,24 @@ export default function ResumeAnalysisReport({ data }) {
                         <b>Growth Skills to Add:</b> {job.growth_skills.join(", ")}
                       </p>
                     )}
+                    {job.company && (
+                      <div style={{ fontSize: "0.82rem", color: "var(--text-muted, #94a3b8)", marginTop: "8px", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "6px" }}>
+                        🏢 <b>{job.company}</b> &nbsp;|&nbsp; 📍 {job.location || "Remote / Hybrid"} ({job.work_mode || "Flexible"}) &nbsp;|&nbsp; 🎓 {job.experience_level || "All Levels"}
+                      </div>
+                    )}
+                    {job.apply_url && (
+                      <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end" }}>
+                        <a
+                          href={job.apply_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="copy-btn glow-btn"
+                          style={{ fontSize: "0.78rem", padding: "4px 10px", textDecoration: "none" }}
+                        >
+                          🔍 Search Verified Listings ↗
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
