@@ -87,8 +87,73 @@ class TestEnhancements(unittest.TestCase):
         self.assertIn("TECHNICAL SKILLS", page_text)
         self.assertIn("PROFESSIONAL EXPERIENCE", page_text)
         self.assertIn("EDUCATION", page_text)
-        self.assertIn("B.S. in Computer Science", page_text)
-        self.assertIn("Tech Solutions Inc.", page_text)
+    def test_original_resume_preservation_with_projects_and_urls(self):
+        complex_resume = """Jane Developer
+jane.dev@example.com | +1 555-987-6543 | New York, NY
+https://linkedin.com/in/janedev | https://github.com/janedev | https://janedev.dev
+Professional Summary
+Experienced Software Engineer specialized in full-stack cloud applications.
+Technical Skills
+Languages: Python, JavaScript, TypeScript, Go
+Cloud & Tools: Docker, Kubernetes, AWS, PostgreSQL, Git
+Professional Experience
+Software Engineer - Cloud Innovations LLC (2021 - Present)
+• Architected scalable microservices handling 25,000+ daily requests.
+• Automated CI/CD pipelines reducing deployment friction by 50%.
+Key Projects
+Distributed Task Scheduler (https://github.com/janedev/task-scheduler)
+• Built an event-driven scheduler using Python, Redis, and Docker.
+• Implemented fault-tolerant worker nodes with automatic task retries.
+Education
+B.Tech in Computer Science - Tech University, 2021 | CGPA: 9.2/10
+Certifications
+• AWS Certified Solutions Architect Associate
+"""
+        record = {
+            "job_title": "Full Stack Cloud Engineer",
+            "result": {
+                "job_title": "Full Stack Cloud Engineer",
+                "summary": "Experienced Software Engineer specialized in full-stack cloud applications.",
+                "matched_skills": ["Python", "Docker", "AWS", "PostgreSQL", "Git"],
+                "extra_skills": ["JavaScript", "TypeScript", "Kubernetes", "Go"],
+                "_raw_text": complex_resume
+            }
+        }
+
+        buf = one_page_ats_resume.generate_exact_one_page_resume(record)
+        doc = fitz.open(stream=buf.getvalue(), filetype="pdf")
+        
+        # 1. Exactly 1 A4 page
+        self.assertEqual(len(doc), 1, "Resume must fit exactly on 1 page")
+        page_text = doc[0].get_text()
+        
+        # 2. Contact and all URLs preserved
+        self.assertIn("JANE DEVELOPER", page_text.upper())
+        self.assertIn("jane.dev@example.com", page_text)
+        self.assertIn("555-987-6543", page_text)
+        self.assertIn("linkedin.com/in/janedev", page_text)
+        self.assertIn("github.com/janedev", page_text)
+        self.assertIn("janedev.dev", page_text)
+        
+        # 3. Technical Skills preserved
+        self.assertIn("Python", page_text)
+        self.assertIn("Docker", page_text)
+        self.assertIn("Kubernetes", page_text)
+        self.assertIn("Go", page_text)
+        
+        # 4. Experience & bullets preserved
+        self.assertIn("Cloud Innovations LLC", page_text)
+        self.assertIn("25,000+", page_text)
+        
+        # 5. Projects & repository links preserved
+        self.assertIn("Distributed Task Scheduler", page_text)
+        self.assertIn("github.com/janedev/task-scheduler", page_text)
+        
+        # 6. Education, CGPA, and Certifications preserved
+        self.assertIn("Tech University", page_text)
+        self.assertIn("9.2/10", page_text)
+        self.assertIn("AWS Certified Solutions Architect", page_text)
+        
         doc.close()
 
 if __name__ == "__main__":

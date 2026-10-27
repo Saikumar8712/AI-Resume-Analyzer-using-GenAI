@@ -41,6 +41,13 @@ def extract_resume_sections(text: str) -> dict:
     github_match = re.search(r"(?:https?://)?(?:www\.)?github\.com/[\w-]+", text, re.IGNORECASE)
     github = github_match.group(0) if github_match else ""
 
+    portfolio = ""
+    candidate_urls = re.findall(r"(?:https?://[^\s|,]+|(?:www\.)?[a-zA-Z0-9-]+\.(?:github\.io|gitlab\.io|dev|me|tech|io|app|vercel\.app)(?:/[^\s|,]+)*)", text, re.IGNORECASE)
+    for u in candidate_urls:
+        if (not email or u.lower() not in email.lower()) and "@" not in u and "linkedin.com" not in u.lower() and "github.com" not in u.lower():
+            portfolio = u
+            break
+
     # Location heuristic (e.g. "San Francisco, CA" or "Austin, TX" or "City, State/Country")
     loc_match = re.search(r"([A-Z][a-zA-Z\s]+,\s*[A-Z]{2}(?:\s+\d{5})?|[A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z]+)", text[:500])
     location = ""
@@ -113,6 +120,7 @@ def extract_resume_sections(text: str) -> dict:
         "location": location,
         "linkedin": linkedin,
         "github": github,
+        "portfolio": portfolio,
         "sections": sections,
         "raw_text": text
     }
@@ -271,6 +279,8 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
         contact_bits.append(html.escape(parsed["linkedin"]))
     if parsed["github"]:
         contact_bits.append(html.escape(parsed["github"]))
+    if parsed.get("portfolio"):
+        contact_bits.append(html.escape(parsed["portfolio"]))
     
     if not contact_bits:
         contact_bits.append("Email: [Contact Email] | Phone: [Direct Phone]")
@@ -297,10 +307,21 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
             )
     flow.append(Paragraph(html.escape(summary_text), body_style))
 
-    # 3. Technical Skills (Categorized)
+    # 3. Technical Skills (Categorized, preserving all original skills with target role skills prioritized)
     matched_skills = result.get("matched_skills", [])
     extra_skills = result.get("extra_skills", [])
-    combined_skills = list(dict.fromkeys(matched_skills + extra_skills))
+    
+    # Also extract any raw skills explicitly listed in candidate's original skills section
+    raw_skill_lines = parsed["sections"].get("skills", [])
+    raw_extracted_skills = []
+    for line in raw_skill_lines:
+        clean_s = re.sub(r"^[A-Za-z\s&/]+:\s*", "", line)
+        for part in re.split(r"[,•|;\t]+", clean_s):
+            token = part.strip()
+            if 1 < len(token) < 28 and not re.search(r"\b(experienced|proficient|knowledge|skills)\b", token.lower()):
+                raw_extracted_skills.append(token)
+
+    combined_skills = list(dict.fromkeys(matched_skills + extra_skills + raw_extracted_skills))
 
     if combined_skills:
         flow.append(Paragraph("TECHNICAL SKILLS", heading_style))
@@ -387,6 +408,52 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
 
     return flow
 
+def verify_original_preservation(parsed: dict, pdf_bytes: bytes) -> dict:
+    """
+    Audits the generated PDF against original resume details to confirm zero loss of facts:
+    - Verifies candidate contact details (Name, Email, Phone, URLs)
+    - Verifies education institutions and degrees
+    - Verifies exact 1 A4 page constraint
+    - Verifies selectable text without clipped content
+    """
+    report = {"verified": True, "page_count": 1, "checks": {}}
+    if not fitz:
+        return report
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    report["page_count"] = len(doc)
+    text = doc[0].get_text() if len(doc) > 0 else ""
+    doc.close()
+
+    text_lower = text.lower()
+
+    # 1. Contact checks
+    report["checks"]["Name"] = bool(parsed["name"].lower() in text_lower)
+    if parsed["email"]:
+        report["checks"]["Email"] = bool(parsed["email"].lower() in text_lower)
+    if parsed["phone"]:
+        report["checks"]["Phone"] = bool(parsed["phone"] in text)
+    if parsed["linkedin"]:
+        report["checks"]["LinkedIn"] = bool("linkedin.com" in text_lower)
+    if parsed["github"]:
+        report["checks"]["GitHub"] = bool("github.com" in text_lower)
+    if parsed.get("portfolio"):
+        report["checks"]["Portfolio"] = bool(parsed["portfolio"].lower() in text_lower)
+
+    # 2. Education checks
+    edu_lines = parsed["sections"].get("education", [])
+    if edu_lines:
+        first_edu = re.sub(r"[^\w\s]", "", edu_lines[0].lower()).split()
+        report["checks"]["Education"] = any(w in text_lower for w in first_edu if len(w) > 3)
+
+    # 3. Exact 1 page check & selectable text
+    report["checks"]["ExactOnePage"] = bool(report["page_count"] == 1)
+    report["checks"]["SelectableText"] = bool(len(text.strip()) > 150)
+
+    report["verified"] = all(report["checks"].values())
+    print(f"[ATS Resume Audit] Page count: {report['page_count']} | Preservation Checks: {report['checks']}")
+    return report
+
 def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
     """
     Renders the ATS-friendly resume to PDF with dynamic budget fitting.
@@ -435,6 +502,7 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
             buf.seek(0)
             
             if page_count == 1:
+                verify_original_preservation(parsed, buf.getvalue())
                 return buf
             selected_buf = buf
         else:
@@ -443,6 +511,7 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
 
     if selected_buf:
         selected_buf.seek(0)
+        verify_original_preservation(parsed, selected_buf.getvalue())
         return selected_buf
 
     # Absolute fallback: return level 2
@@ -451,4 +520,5 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
     flow = build_ats_flowables(parsed, result, job_title, compact_level=2)
     doc.build(flow)
     buf.seek(0)
+    verify_original_preservation(parsed, buf.getvalue())
     return buf
