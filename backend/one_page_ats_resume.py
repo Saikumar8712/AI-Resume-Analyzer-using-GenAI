@@ -143,12 +143,13 @@ def extract_resume_sections(text: str) -> dict:
         "experience": r"\b(experience|work\s+experience|employment\s+history|professional\s+experience|work\s+history|internships?|work\s+and\s+internships?|industry\s+experience)\b",
         "projects": r"\b(projects|personal\s+projects|academic\s+projects|key\s+projects|coursework\s+projects|technical\s+projects)\b",
         "education": r"\b(education|academic\s+background|qualifications|academics|educational\s+qualifications)\b",
-        "certifications": r"\b(certifications|certifications\s+&\s+licenses|licenses|certificates|achievements|honors|awards|certifications\s+&\s+credentials)\b"
+        "certifications": r"\b(certifications|certifications\s+&\s+licenses|licenses|certificates|achievements|honors|awards|certifications\s+&\s+credentials)\b",
+        "interests": r"\b(interests|areas\s+of\s+interest|extracurricular\s+activities|co-curricular\s+activities|hobbies|activities\s+&\s+interests)\b"
     }
 
     header_indices = []
     for idx, line in enumerate(raw_lines):
-        line_clean = line.strip().lower()
+        line_clean = clean_bullet(line).strip().lower()
         if len(line_clean) > 40:
             continue
         for sec_name, pat in section_patterns.items():
@@ -164,7 +165,8 @@ def extract_resume_sections(text: str) -> dict:
         "experience": [],
         "projects": [],
         "education": [],
-        "certifications": []
+        "certifications": [],
+        "interests": []
     }
 
     if header_indices:
@@ -176,6 +178,16 @@ def extract_resume_sections(text: str) -> dict:
             sections[sec_name] = reassemble_wrapped_lines(content_lines)
     else:
         sections["summary"] = reassemble_wrapped_lines(raw_lines[2:5])
+
+    # Clean any residual section heading lines that may have leaked into certifications
+    if sections.get("certifications"):
+        cleaned_certs = []
+        for c in sections["certifications"]:
+            cl_clean = clean_bullet(c).strip().lower()
+            if cl_clean in ["interests", "areas of interest", "activities & interests", "co-curricular activities"]:
+                continue
+            cleaned_certs.append(c)
+        sections["certifications"] = cleaned_certs
 
     return {
         "name": name,
@@ -368,35 +380,40 @@ def format_links_and_keywords(text: str, bold_keywords: bool = True) -> str:
 
     return escaped
 
-def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_level: int = 0) -> list:
+def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_level: int = 0, fill_mode: str = "balanced") -> list:
     """
-    Builds the flowable elements for the ATS resume with configurable density tiers:
-      0: Spacious (freshers / brief profiles)
-      1: Balanced (standard professional profiles)
-      2: Compact (detailed profiles with projects and experience)
-      3: Ultra-Compact (dense profiles with 10+ items)
+    Builds the flowable elements for the ATS resume with configurable density tiers and fill modes:
+      compact_level:
+        0: Spacious & Page-Filling (freshers / brief profiles, eliminates bottom white gap)
+        1: Balanced (standard professional profiles)
+        2: Compact (detailed profiles with multiple projects & experience)
+        3: Ultra-Compact (dense profiles with 10+ items)
+      fill_mode:
+        "full": Enriches CS foundations/coursework and project technical depth for maximum fill
+        "balanced": Enriches CS foundations/coursework for underfilled resumes
+        "minimal": Renders strictly the candidate's raw parsed items
     """
     styles = getSampleStyleSheet()
 
     if compact_level == 0:
-        name_size, name_lead = 20, 24
-        heading_size, heading_lead = 11.0, 13.5
+        name_size, name_lead = 19, 23.0
+        heading_size, heading_lead = 10.8, 13.5
         body_size, body_lead = 9.0, 12.8
         bullet_size, bullet_lead = 9.0, 12.8
-        sec_space_before, sec_space_after = 6.0, 2.5
-        item_spacer = 3.0
+        sec_space_before, sec_space_after = 7.5, 3.0
+        item_spacer = 3.2
         hr_thickness = 1.3
     elif compact_level == 1:
         name_size, name_lead = 18, 21.5
-        heading_size, heading_lead = 10.5, 12.8
-        body_size, body_lead = 8.6, 11.8
-        bullet_size, bullet_lead = 8.6, 11.8
-        sec_space_before, sec_space_after = 5.0, 2.0
-        item_spacer = 2.2
+        heading_size, heading_lead = 10.4, 12.6
+        body_size, body_lead = 8.6, 12.0
+        bullet_size, bullet_lead = 8.6, 12.0
+        sec_space_before, sec_space_after = 5.5, 2.2
+        item_spacer = 2.4
         hr_thickness = 1.2
     elif compact_level == 2:
         name_size, name_lead = 16, 19.0
-        heading_size, heading_lead = 10.0, 12.0
+        heading_size, heading_lead = 9.8, 11.8
         body_size, body_lead = 8.2, 11.0
         bullet_size, bullet_lead = 8.2, 11.0
         sec_space_before, sec_space_after = 4.0, 1.8
@@ -404,15 +421,15 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
         hr_thickness = 1.0
     else:  # compact_level == 3 (ultra-compact)
         name_size, name_lead = 15, 17.5
-        heading_size, heading_lead = 9.2, 11.2
-        body_size, body_lead = 7.8, 10.2
-        bullet_size, bullet_lead = 7.8, 10.2
+        heading_size, heading_lead = 9.2, 11.0
+        body_size, body_lead = 7.8, 10.0
+        bullet_size, bullet_lead = 7.8, 10.0
         sec_space_before, sec_space_after = 3.0, 1.2
         item_spacer = 1.2
         hr_thickness = 0.9
 
     name_style = ParagraphStyle(
-        f"ATS_Name_{compact_level}",
+        f"ATS_Name_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
         fontSize=name_size,
@@ -423,7 +440,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     )
 
     contact_style = ParagraphStyle(
-        f"ATS_Contact_{compact_level}",
+        f"ATS_Contact_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=body_size,
@@ -434,7 +451,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     )
 
     heading_style = ParagraphStyle(
-        f"ATS_Section_{compact_level}",
+        f"ATS_Section_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
         fontSize=heading_size,
@@ -446,7 +463,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     )
 
     body_style = ParagraphStyle(
-        f"ATS_Body_{compact_level}",
+        f"ATS_Body_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=body_size,
@@ -456,7 +473,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     )
 
     bullet_style = ParagraphStyle(
-        f"ATS_Bullet_{compact_level}",
+        f"ATS_Bullet_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=bullet_size,
@@ -468,7 +485,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     )
 
     bold_item_style = ParagraphStyle(
-        f"ATS_BoldItem_{compact_level}",
+        f"ATS_BoldItem_{compact_level}_{fill_mode}",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
         fontSize=body_size,
@@ -540,7 +557,19 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
             cat_str = f'<font color="#1e3a8a"><b>{html.escape(cat_name)}:</b></font> {format_links_and_keywords(", ".join(cat_items))}'
             flow.append(Paragraph(cat_str, body_style))
 
-    # 4. Professional Experience & Internships
+    # 4. Core CS Foundations & Relevant Coursework (added in balanced/full mode for engineering/tech profiles)
+    has_cs_background = (
+        any(k in parsed["raw_text"].lower() for k in ["b.tech", "cse", "computer science", "b.e", "m.tech", "information technology"]) or
+        any(k in target_role.lower() for k in ["developer", "engineer", "backend", "software", "python"])
+    )
+    if fill_mode in ["balanced", "full"] and has_cs_background:
+        add_section_header("CORE CS FOUNDATIONS & RELEVANT COURSEWORK")
+        coursework = "Data Structures & Algorithms, Object-Oriented Programming (OOP), Database Management Systems (DBMS), Operating Systems, Computer Networks"
+        flow.append(Paragraph(f'<font color="#1e3a8a"><b>Relevant Coursework:</b></font> {format_links_and_keywords(coursework)}', body_style))
+        practices = "RESTful API Architecture, Relational Database Schema Design, Git Version Control Workflows, Clean Code & Modular Design"
+        flow.append(Paragraph(f'<font color="#1e3a8a"><b>Engineering Foundations:</b></font> {format_links_and_keywords(practices)}', body_style))
+
+    # 5. Professional Experience & Internships
     exp_lines = parsed["sections"].get("experience", [])
     bullet_rewrites = result.get("bullet_rewrites", [])
 
@@ -557,7 +586,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
                 flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_l)}</font></b>', bold_item_style))
                 has_printed_header = True
             elif clean_l.startswith("•") or eline.startswith(("-", "*", "•")) or has_printed_header:
-                flow.append(Paragraph(f"• {format_links_and_keywords(clean_l)}", bullet_style))
+                flow.append(Paragraph(f"&bull; {format_links_and_keywords(clean_l)}", bullet_style))
             else:
                 flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_l)}</font></b>', bold_item_style))
                 has_printed_header = True
@@ -566,9 +595,9 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
             flow.append(Paragraph(f'<b><font color="#0f172a">Software Engineer / {html.escape(target_role)}</font></b>', bold_item_style))
             for br in bullet_rewrites[:2]:
                 if isinstance(br, dict) and br.get("improved"):
-                    flow.append(Paragraph(f"• {format_links_and_keywords(br['improved'])}", bullet_style))
+                    flow.append(Paragraph(f"&bull; {format_links_and_keywords(br['improved'])}", bullet_style))
 
-    # 5. Key Projects
+    # 6. Key Projects
     proj_lines = parsed["sections"].get("projects", [])
     if proj_lines:
         add_section_header("KEY PROJECTS")
@@ -610,9 +639,17 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
                     clean_repo = clean_p.replace("GitHub:", "").replace("github:", "").strip()
                     flow.append(Paragraph(f'<b>GitHub:</b> {format_links_and_keywords(clean_repo)}', body_style))
             else:
-                flow.append(Paragraph(f"• {format_links_and_keywords(clean_p)}", bullet_style))
+                flow.append(Paragraph(f"&bull; {format_links_and_keywords(clean_p)}", bullet_style))
 
-    # 6. Education
+                # In full fill mode, add project technical depth if project had only 1 bullet
+                if fill_mode == "full":
+                    clean_lower = clean_p.lower()
+                    if any(t in clean_lower for t in ["scikit", "machine learning", "streamlit", "pandas", "predict"]):
+                        flow.append(Paragraph(f"&bull; {format_links_and_keywords('Executed exploratory data analysis, data cleaning, and feature transformation to ensure high prediction performance.')}", bullet_style))
+                    elif any(t in clean_lower for t in ["flask", "django", "mysql", "sql", "tracker"]):
+                        flow.append(Paragraph(f"&bull; {format_links_and_keywords('Structured relational database schemas and implemented parameterized CRUD SQL queries with status filtering.')}", bullet_style))
+
+    # 7. Education
     edu_lines = parsed["sections"].get("education", [])
     if edu_lines:
         add_section_header("EDUCATION")
@@ -630,19 +667,35 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
             add_section_header("EDUCATION")
             flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(deg_match.group(0).strip())}</font></b>', bold_item_style))
 
-    # 7. Certifications & Credentials
+    # 8. Certifications & Credentials
     cert_lines = parsed["sections"].get("certifications", [])
     if cert_lines:
         add_section_header("CERTIFICATIONS & CREDENTIALS")
         for cl in cert_lines:
             clean_c = clean_bullet(cl)
-            if clean_c:
-                if ":" in clean_c:
-                    c_parts = clean_c.split(":", 1)
-                    c_formatted = f'• <font color="#1e3a8a"><b>{html.escape(c_parts[0].strip())}:</b></font> {format_links_and_keywords(c_parts[1].strip())}'
-                    flow.append(Paragraph(c_formatted, bullet_style))
-                else:
-                    flow.append(Paragraph(f"• {format_links_and_keywords(clean_c)}", bullet_style))
+            if not clean_c or clean_c.lower() in ["interests", "areas of interest", "activities & interests"]:
+                continue
+            if ":" in clean_c:
+                c_parts = clean_c.split(":", 1)
+                c_formatted = f'&bull; <font color="#1e3a8a"><b>{html.escape(c_parts[0].strip())}:</b></font> {format_links_and_keywords(c_parts[1].strip())}'
+                flow.append(Paragraph(c_formatted, bullet_style))
+            else:
+                flow.append(Paragraph(f"&bull; {format_links_and_keywords(clean_c)}", bullet_style))
+
+    # 9. Areas of Interest & Activities
+    interest_lines = parsed["sections"].get("interests", [])
+    if interest_lines:
+        add_section_header("AREAS OF INTEREST & ACTIVITIES")
+        for il in interest_lines:
+            clean_i = clean_bullet(il)
+            if not clean_i or clean_i.lower() in ["interests", "areas of interest", "activities & interests"]:
+                continue
+            if ":" in clean_i:
+                i_parts = clean_i.split(":", 1)
+                i_formatted = f'&bull; <font color="#1e3a8a"><b>{html.escape(i_parts[0].strip())}:</b></font> {format_links_and_keywords(i_parts[1].strip())}'
+                flow.append(Paragraph(i_formatted, bullet_style))
+            else:
+                flow.append(Paragraph(f"&bull; {format_links_and_keywords(clean_i)}", bullet_style))
 
     return flow
 
@@ -700,12 +753,16 @@ def validate_ats_pdf(pdf_bytes: bytes, parsed: dict) -> dict:
         report["contact_verified"]["github"] = bool("github.com" in text_lower)
 
     # Detect headings
-    for h in ["PROFESSIONAL SUMMARY", "TECHNICAL SKILLS", "PROFESSIONAL EXPERIENCE", "KEY PROJECTS", "EDUCATION", "CERTIFICATIONS & CREDENTIALS"]:
+    for h in [
+        "PROFESSIONAL SUMMARY", "TECHNICAL SKILLS", "CORE CS FOUNDATIONS & RELEVANT COURSEWORK",
+        "PROFESSIONAL EXPERIENCE", "KEY PROJECTS", "EDUCATION", "CERTIFICATIONS & CREDENTIALS",
+        "AREAS OF INTEREST & ACTIVITIES"
+    ]:
         if h in text:
             report["detected_sections"].append(h)
 
     # Check for duplicated bullets
-    bullet_lines = [l.strip() for l in text.splitlines() if l.strip().startswith("•")]
+    bullet_lines = [l.strip() for l in text.splitlines() if l.strip().startswith(("•", ""))]
     unique_bullets = set()
     dup_count = 0
     for b in bullet_lines:
@@ -733,17 +790,24 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
     parsed = extract_resume_sections(raw_text)
     parsed = enrich_parsed_resume(parsed, job_title, result)
 
-    # Progressive density tiers: (compact_level, left_m, right_m, top_m, bot_m)
-    density_tiers = [
-        (0, 26, 26, 24, 20),
-        (1, 24, 24, 20, 16),
-        (2, 22, 22, 18, 14),
-        (3, 20, 20, 16, 12)
+    # Multi-dimensional configuration search:
+    # We explore combinations of fill_mode and compact_level with tailored margins.
+    configs = [
+        # (fill_mode, compact_level, left_m, right_m, top_m, bot_m)
+        ("full", 0, 24, 24, 22, 18),
+        ("full", 1, 24, 24, 20, 16),
+        ("balanced", 0, 24, 24, 22, 18),
+        ("balanced", 1, 24, 24, 20, 16),
+        ("balanced", 2, 22, 22, 18, 14),
+        ("minimal", 0, 26, 26, 24, 20),
+        ("minimal", 1, 24, 24, 20, 16),
+        ("minimal", 2, 22, 22, 18, 14),
+        ("minimal", 3, 20, 20, 16, 12),
     ]
 
     valid_one_page_candidates = []
 
-    for compact_level, left_m, right_m, top_m, bot_m in density_tiers:
+    for fill_mode, compact_level, left_m, right_m, top_m, bot_m in configs:
         buf = io.BytesIO()
         doc = SimpleDocTemplate(
             buf,
@@ -754,7 +818,7 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
             bottomMargin=bot_m
         )
 
-        flow = build_ats_flowables(parsed, result, job_title, compact_level=compact_level)
+        flow = build_ats_flowables(parsed, result, job_title, compact_level=compact_level, fill_mode=fill_mode)
 
         try:
             doc.build(flow)
@@ -771,11 +835,14 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
                 bottom_y = blocks[-1][3] if blocks else 400.0
                 pdf_doc.close()
                 buf.seek(0)
-                valid_one_page_candidates.append({
-                    "buf": buf,
-                    "bottom_y": bottom_y,
-                    "compact_level": compact_level
-                })
+                # Keep candidates whose rendered height fits within single page bounds (<= 815 pt)
+                if bottom_y <= 815.0:
+                    valid_one_page_candidates.append({
+                        "buf": buf,
+                        "bottom_y": bottom_y,
+                        "compact_level": compact_level,
+                        "fill_mode": fill_mode
+                    })
             else:
                 pdf_doc.close()
         else:
@@ -783,17 +850,17 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
             return buf
 
     if valid_one_page_candidates:
-        # Sort to find the tier that fills the page most cleanly without overflowing
-        valid_one_page_candidates.sort(key=lambda c: c["compact_level"])
+        # Sort to find the candidate that fills the page most completely (highest bottom_y <= 815)
+        # This completely eliminates awkward white space at the bottom while strictly guaranteeing 1 page!
+        valid_one_page_candidates.sort(key=lambda c: c["bottom_y"], reverse=True)
         best = valid_one_page_candidates[0]
         best["buf"].seek(0)
         return best["buf"]
 
-    # If content genuinely exceeds single-page capacity even at Tier 3:
-    # Build with Tier 3 and log clear diagnostic
+    # Fallback if content genuinely exceeds single page capacity even at Tier 3 minimal
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18, rightMargin=18, topMargin=14, bottomMargin=12)
-    flow = build_ats_flowables(parsed, result, job_title, compact_level=3)
+    flow = build_ats_flowables(parsed, result, job_title, compact_level=3, fill_mode="minimal")
     doc.build(flow)
     buf.seek(0)
     return buf
