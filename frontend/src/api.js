@@ -18,3 +18,5 @@ export const getAnalysis = (id) => fetch(`${API_BASE_URL}/api/history/${id}`).th
 export const deleteAnalysis = (id) => fetch(`${API_BASE_URL}/api/history/${id}`, { method: "DELETE" }).then(handle);
 export const pdfUrl = (id) => `${API_BASE_URL}/api/report/${id}/pdf`;
 export const atsResumeUrl = (id) => `${API_BASE_URL}/api/report/${id}/ats-resume`;
+export const validationUrl = (id) => `${API_BASE_URL}/api/report/${id}/validation`;
+export const getPdfValidation = (id) => fetch(`${API_BASE_URL}/api/report/${id}/validation`).then(handle);

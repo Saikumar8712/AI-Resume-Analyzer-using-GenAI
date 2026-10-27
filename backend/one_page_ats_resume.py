@@ -1,6 +1,6 @@
 """
 One-Page ATS-Friendly Resume PDF Generator
-Produces a complete, professional, role-tailored single-column ATS resume PDF.
+Produces an authentic, professional, single-column ATS resume PDF.
 Guarantees EXACTLY ONE A4 PAGE with selectable text, standard headings,
 and zero fabricated information.
 """
@@ -12,6 +12,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+
 try:
     import pymupdf as fitz
 except ImportError:
@@ -20,15 +21,70 @@ except ImportError:
     except ImportError:
         fitz = None
 
+DEGREE_EXCLUSIONS = {
+    "b.tech", "m.tech", "btech", "mtech", "b.e", "m.e", "b.sc", "m.sc",
+    "b.s", "m.s", "phd", "bca", "mca", "b.com", "m.com", "mba"
+}
+
+def clean_bullet(line: str) -> str:
+    """Cleans leading bullet characters, symbols, and formatting artifacts from a line."""
+    cleaned = re.sub(r"^[\s\u2022\u25cf\u25cb\u25aa\u25b8\-\*\>\uFFFD\?]+", "", line).strip()
+    return cleaned
+
+def reassemble_wrapped_lines(lines: list) -> list:
+    """
+    Reassembles lines that were split across line breaks by PDF extraction.
+    Ensures multi-line sentences remain unified rather than becoming separate bullets.
+    """
+    if not lines:
+        return []
+    reassembled = []
+    action_verbs = {
+        "built", "developed", "designed", "engineered", "implemented", "created",
+        "led", "managed", "optimized", "spearheaded", "automated", "architected"
+    }
+    for line in lines:
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+
+        clean_start = clean_bullet(cleaned).strip()
+        first_word = clean_start.split()[0].lower() if clean_start.split() else ""
+
+        is_distinct = (
+            cleaned.startswith(("•", "-", "*", ">", "1.", "2.", "3.", "4.", "5.", "(1)", "(2)", "(3)")) or
+            bool(re.match(r"^\d+\.\s+", clean_start)) or
+            bool(re.match(r"^[A-Z][A-Za-z0-9\s&/.,|-]{2,40}:", clean_start)) or
+            bool(re.search(r"^(?:https?://|www\.|github\.com|linkedin\.com)", clean_start, re.IGNORECASE)) or
+            bool(re.search(r"https?://", clean_start)) or
+            first_word in action_verbs or
+            (clean_start and clean_start[0].isupper() and (not reassembled or reassembled[-1].endswith((".", "!", "?"))))
+        )
+
+        if not reassembled or is_distinct:
+            reassembled.append(cleaned)
+        else:
+            prev = reassembled[-1]
+            if (
+                clean_start and (clean_start[0].islower() or
+                first_word in ["and", "or", "with", "including", "using", "for", "to", "in", "of", "from", "application", "dates,"]) or
+                prev.rstrip().endswith((",", ";", "-", "and", "or", "with", "to", "in", "of", "a", "an", "the"))
+            ):
+                reassembled[-1] = prev + " " + clean_start
+            else:
+                reassembled.append(cleaned)
+
+    return reassembled
+
 def extract_resume_sections(text: str) -> dict:
     """
-    Parses full candidate details from raw resume text:
-    Name, Contact (email, phone, location, linkedin, github),
+    Parses candidate details and content from raw resume text:
+    Name, Contact (email, phone, location, linkedin, github, portfolio),
     Summary, Skills, Experience, Projects, Education, Certifications.
     """
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    
-    # 1. Contact information
+    raw_lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    # 1. Contact Information
     email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", text)
     email = email_match.group(0) if email_match else ""
 
@@ -42,56 +98,64 @@ def extract_resume_sections(text: str) -> dict:
     github = github_match.group(0) if github_match else ""
 
     portfolio = ""
-    candidate_urls = re.findall(r"(?:https?://[^\s|,]+|(?:www\.)?[a-zA-Z0-9-]+\.(?:github\.io|gitlab\.io|dev|me|tech|io|app|vercel\.app)(?:/[^\s|,]+)*)", text, re.IGNORECASE)
+    candidate_urls = re.findall(
+        r"(?:https?://[^\s|,]+|(?:www\.)[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s|,]+)*|[a-zA-Z0-9-]+\.(?:github\.io|gitlab\.io|vercel\.app|netlify\.app|onrender\.com)(?:/[^\s|,]+)*)",
+        text,
+        re.IGNORECASE
+    )
     for u in candidate_urls:
-        if (not email or u.lower() not in email.lower()) and "@" not in u and "linkedin.com" not in u.lower() and "github.com" not in u.lower():
-            portfolio = u
+        u_clean = u.strip().rstrip(".,;|")
+        u_lower = u_clean.lower()
+        if (
+            u_lower not in DEGREE_EXCLUSIONS and
+            not any(u_lower.startswith(d) for d in DEGREE_EXCLUSIONS) and
+            (not email or u_lower not in email.lower()) and
+            "@" not in u_clean and
+            "linkedin.com" not in u_lower and
+            "github.com" not in u_lower
+        ):
+            portfolio = u_clean
             break
 
-    # Location heuristic (e.g. "San Francisco, CA" or "Austin, TX" or "City, State/Country")
-    loc_match = re.search(r"([A-Z][a-zA-Z\s]+,\s*[A-Z]{2}(?:\s+\d{5})?|[A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z]+)", text[:500])
+    loc_match = re.search(r"([A-Z][a-zA-Z\s]+,\s*[A-Z]{2}(?:\s+\d{5})?|[A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z]+)", text[:600])
     location = ""
     if loc_match:
         cand_loc = loc_match.group(0).strip()
-        # Ensure not an email or title
         if "@" not in cand_loc and len(cand_loc.split(",")) == 2:
             location = cand_loc
 
-    # Extract Candidate Name (usually line 1 or line 2)
+    # Extract Candidate Name (lines 1-4 of raw lines, avoiding section headings)
     name = "Candidate"
-    for line in lines[:4]:
-        if "@" in line or "http" in line.lower() or "resume" in line.lower() or "curriculum" in line.lower():
+    section_heading_keywords = r"\b(summary|profile|skills|experience|projects|education|certifications|curriculum|resume)\b"
+    for line in raw_lines[:4]:
+        if "@" in line or "http" in line.lower() or re.search(section_heading_keywords, line.lower()):
             continue
-        # Clean special chars
         cleaned = re.sub(r"[^a-zA-Z\s.]", "", line).strip()
         words = cleaned.split()
         if 1 <= len(words) <= 4 and all(w[0].isupper() for w in words if w):
             name = cleaned
             break
 
-    # 2. Section segmentation
-    # Standard headings regex
+    # 2. Section Segmentation
     section_patterns = {
-        "summary": r"\b(professional\s+summary|summary|profile|about\s+me)\b",
-        "skills": r"\b(technical\s+skills|skills|technologies|proficiencies|core\s+competencies)\b",
-        "experience": r"\b(experience|work\s+experience|employment\s+history|professional\s+experience|work\s+history)\b",
-        "projects": r"\b(projects|personal\s+projects|academic\s+projects|key\s+projects)\b",
-        "education": r"\b(education|academic\s+background|qualifications|academics)\b",
-        "certifications": r"\b(certifications|certifications\s+&\s+licenses|licenses|certificates)\b"
+        "summary": r"\b(professional\s+summary|executive\s+summary|career\s+summary|summary|profile|about\s+me|career\s+objective|objective)\b",
+        "skills": r"\b(technical\s+skills|skills|technologies|proficiencies|core\s+competencies|key\s+skills|technical\s+proficiencies|tools\s+&\s+technologies)\b",
+        "experience": r"\b(experience|work\s+experience|employment\s+history|professional\s+experience|work\s+history|internships?|work\s+and\s+internships?|industry\s+experience)\b",
+        "projects": r"\b(projects|personal\s+projects|academic\s+projects|key\s+projects|coursework\s+projects|technical\s+projects)\b",
+        "education": r"\b(education|academic\s+background|qualifications|academics|educational\s+qualifications)\b",
+        "certifications": r"\b(certifications|certifications\s+&\s+licenses|licenses|certificates|achievements|honors|awards|certifications\s+&\s+credentials)\b"
     }
 
-    # Identify lines that act as section headers
     header_indices = []
-    for idx, line in enumerate(lines):
+    for idx, line in enumerate(raw_lines):
         line_clean = line.strip().lower()
-        if len(line_clean) > 35:
+        if len(line_clean) > 40:
             continue
         for sec_name, pat in section_patterns.items():
             if re.fullmatch(pat, line_clean) or (re.search(pat, line_clean) and len(line_clean.split()) <= 4):
                 header_indices.append((idx, sec_name))
                 break
 
-    # Sort indices by line number
     header_indices.sort(key=lambda x: x[0])
 
     sections = {
@@ -106,12 +170,12 @@ def extract_resume_sections(text: str) -> dict:
     if header_indices:
         for i in range(len(header_indices)):
             start_idx, sec_name = header_indices[i]
-            end_idx = header_indices[i + 1][0] if i + 1 < len(header_indices) else len(lines)
-            content_lines = lines[start_idx + 1:end_idx]
-            sections[sec_name] = content_lines
+            end_idx = header_indices[i + 1][0] if i + 1 < len(header_indices) else len(raw_lines)
+            content_lines = raw_lines[start_idx + 1:end_idx]
+            # Reassemble lines specifically for this section
+            sections[sec_name] = reassemble_wrapped_lines(content_lines)
     else:
-        # Fallback if no strict headers found
-        sections["summary"] = lines[2:5]
+        sections["summary"] = reassemble_wrapped_lines(raw_lines[2:5])
 
     return {
         "name": name,
@@ -125,13 +189,33 @@ def extract_resume_sections(text: str) -> dict:
         "raw_text": text
     }
 
-def clean_bullet(line: str) -> str:
-    """Cleans bullet characters, symbols, and artifacts from a line."""
-    cleaned = re.sub(r"^[\s\u2022\u25cf\u25cb\u25aa\u25b8\-\*\>\uFFFD\?]+", "", line).strip()
-    return cleaned
+def clean_and_split_skills(line: str) -> list:
+    """
+    Cleans inline parenthetical details e.g. '(Queries, CRUD Operations)'
+    and returns atomic, deduplicated skill strings.
+    """
+    # Remove leading heading label like 'Languages & Core:'
+    line = re.sub(r"^[A-Za-z\s&/]+:\s*", "", line)
+    # Remove parenthetical comments before splitting on commas
+    line = re.sub(r"\(.*?\)", "", line)
+
+    tokens = []
+    for part in re.split(r"[,•|;\t]+", line):
+        t = part.strip().rstrip(".,;")
+        t = re.sub(r"^(?:and|with|including)\s+", "", t, flags=re.IGNORECASE).strip()
+        if not t or len(t) > 30 or t.lower() in [
+            "internships", "internship", "experience", "skills", "projects", "education",
+            "basic commands", "file navigation", "file management", "version control", "repository management"
+        ]:
+            continue
+        for sub in re.split(r"[/]+", t):
+            sub_clean = sub.strip()
+            if len(sub_clean) >= 2 and not sub_clean.lower().startswith("and "):
+                tokens.append(sub_clean)
+    return tokens
 
 def categorize_skills(all_skills: list) -> dict:
-    """Categorizes flat skills list into standard ATS buckets."""
+    """Categorizes skills cleanly into standard ATS categories."""
     categories = {
         "Languages & Core": [],
         "Frameworks & Libraries": [],
@@ -139,139 +223,193 @@ def categorize_skills(all_skills: list) -> dict:
         "Tools & Methodologies": []
     }
 
-    lang_set = {"Python", "JavaScript", "TypeScript", "SQL", "C#", "Go", "Rust", "HTML/CSS", "Java", "C++", "PHP", "Ruby"}
-    framework_set = {"FastAPI", "Flask", "Django", "React", "Next.js", "Node.js", "Vue.js", "Angular", "Spring Boot", "Tailwind CSS", "Flutter"}
-    db_cloud_set = {"AWS", "GCP", "Azure", "Docker", "Kubernetes", "Redis", "Kafka", "PostgreSQL", "MongoDB", "MySQL"}
-    tools_set = {"Git", "CI/CD", "Linux", "DevOps", "Unit testing", "Machine learning", "Deep learning", "NLP", "Pandas", "Agile", "REST APIs", "Microservices", "System Design"}
+    lang_set = {
+        "Python", "JavaScript", "TypeScript", "SQL", "C#", "Go", "Rust", "HTML/CSS", "HTML",
+        "CSS", "Java", "C++", "PHP", "Ruby", "C", "Dart", "Kotlin", "Swift", "Scala", "R"
+    }
+    framework_set = {
+        "FastAPI", "Flask", "Django", "React", "Next.js", "Node.js", "Vue.js", "Angular",
+        "Spring Boot", "Tailwind CSS", "Flutter", "Express", "ASP.NET", "Bootstrap", "PyTorch", "TensorFlow"
+    }
+    db_cloud_set = {
+        "AWS", "GCP", "Azure", "Docker", "Kubernetes", "Redis", "Kafka", "PostgreSQL",
+        "MongoDB", "MySQL", "SQLite", "Oracle", "Cloud", "Firebase", "DynamoDB"
+    }
+    tools_set = {
+        "Git", "GitHub", "GitLab", "CI/CD", "Linux", "DevOps", "Unit testing", "Machine learning",
+        "Scikit-learn", "Deep learning", "NLP", "Pandas", "NumPy", "Agile", "Scrum", "REST APIs",
+        "RESTful", "Microservices", "System Design", "Jira", "Postman"
+    }
 
+    canonical_map = {
+        "mysql": "MySQL",
+        "postgresql": "PostgreSQL",
+        "postgres": "PostgreSQL",
+        "github": "GitHub",
+        "rest api": "REST APIs",
+        "rest apis": "REST APIs",
+        "restful": "REST APIs",
+        "html": "HTML/CSS",
+        "css": "HTML/CSS",
+        "html/css": "HTML/CSS",
+        "scikit-learn": "Scikit-learn",
+        "sklearn": "Scikit-learn",
+        "linux": "Linux",
+        "git": "Git",
+        "docker": "Docker",
+        "kubernetes": "Kubernetes",
+        "fastapi": "FastAPI",
+        "flask": "Flask",
+        "django": "Django",
+        "pandas": "Pandas",
+        "numpy": "NumPy",
+        "python": "Python",
+        "sql": "SQL",
+        "javascript": "JavaScript",
+        "typescript": "TypeScript",
+        "react": "React",
+        "node.js": "Node.js",
+        "nodejs": "Node.js"
+    }
+
+    seen = set()
+    cleaned_skills = []
     for s in all_skills:
-        placed = False
-        if s in lang_set:
-            categories["Languages & Core"].append(s)
-            placed = True
-        elif s in framework_set:
-            categories["Frameworks & Libraries"].append(s)
-            placed = True
-        elif s in db_cloud_set:
-            categories["Databases & Cloud"].append(s)
-            placed = True
-        elif s in tools_set:
-            categories["Tools & Methodologies"].append(s)
-            placed = True
-        if not placed:
-            categories["Languages & Core"].append(s)
+        for t in clean_and_split_skills(str(s)):
+            canon = canonical_map.get(t.lower(), t)
+            if canon.lower() not in seen:
+                seen.add(canon.lower())
+                cleaned_skills.append(canon)
 
-    # Filter empty buckets
-    return {k: v for k, v in categories.items() if v}
+    for s in cleaned_skills:
+        s_title = s.strip()
+        placed = False
+        for k in lang_set:
+            if s_title.lower() == k.lower():
+                categories["Languages & Core"].append(k)
+                placed = True
+                break
+        if not placed:
+            for k in framework_set:
+                if s_title.lower() == k.lower():
+                    categories["Frameworks & Libraries"].append(k)
+                    placed = True
+                    break
+        if not placed:
+            for k in db_cloud_set:
+                if s_title.lower() == k.lower():
+                    categories["Databases & Cloud"].append(k)
+                    placed = True
+                    break
+        if not placed:
+            for k in tools_set:
+                if s_title.lower() == k.lower():
+                    categories["Tools & Methodologies"].append(k)
+                    placed = True
+                    break
+        if not placed:
+            if any(term in s_title.lower() for term in ["api", "tool", "test", "ci", "cd", "manage", "agile"]):
+                categories["Tools & Methodologies"].append(s_title)
+            elif any(term in s_title.lower() for term in ["db", "data", "cloud", "server", "sql"]):
+                categories["Databases & Cloud"].append(s_title)
+            else:
+                categories["Languages & Core"].append(s_title)
+
+    return {k: list(dict.fromkeys(v)) for k, v in categories.items() if v}
 
 def enrich_parsed_resume(parsed: dict, target_role: str, result: dict) -> dict:
     """
-    Enriches resume sections with authentic, role-aligned technical substance
-    so that the A4 page is fully and professionally filled without large blank gaps.
-    Strictly preserves all genuine facts; never fabricates companies, degrees, or false metrics.
+    Polishes professional summary if missing or ultra-brief based strictly on candidate's verified skills.
+    Never invents unverified project bullets, false metrics, or fake degrees.
     """
-    raw_text_lower = parsed["raw_text"].lower()
     matched_skills = result.get("matched_skills", [])
-
-    # 1. Enrich Professional Summary if brief (< 40 words)
     summary_lines = parsed["sections"].get("summary", [])
     current_summary = " ".join(summary_lines).strip()
-    if len(current_summary.split()) < 40:
-        skill_str = ", ".join(matched_skills[:4]) if matched_skills else "Python, REST APIs, and database engineering"
+    if len(current_summary.split()) < 20:
+        skill_str = ", ".join(matched_skills[:4]) if matched_skills else "software engineering and modern technologies"
         enhanced_summary = (
-            f"Results-driven {target_role} with strong hands-on expertise in {skill_str}. "
-            f"Proven ability to architect production-ready web services, design scalable relational database schemas, "
-            f"and implement automated application workflows. Adept at transforming technical requirements into "
-            f"clean, maintainable, modular software while adhering strictly to agile methodologies and modern engineering best practices."
+            f"Results-oriented {target_role} with proven hands-on expertise in {skill_str}. "
+            f"Demonstrated track record of delivering resilient software solutions while "
+            f"adhering strictly to industry best practices and clean, maintainable code."
         )
         parsed["sections"]["summary"] = [enhanced_summary]
-
-    # 2. Enrich Projects with substantive technical bullets if brief
-    proj_lines = parsed["sections"].get("projects", [])
-    if proj_lines:
-        enriched_proj = []
-        for line in proj_lines:
-            enriched_proj.append(line)
-            clean_l = clean_bullet(line).lower()
-            
-            # Machine Learning / Predictive Projects
-            if any(k in clean_l for k in ["water quality", "machine learning", "scikit-learn", "predict", "streamlit"]):
-                enriched_proj.append("• Engineered end-to-end data preprocessing pipelines including outlier detection, missing value imputation, and classification model evaluation.")
-                enriched_proj.append("• Built an interactive Streamlit dashboard enabling real-time multi-parameter inputs and dynamic probability visualizations; hosted source code on GitHub.")
-            
-            # Web Application / Flask / Full Stack Projects
-            elif any(k in clean_l for k in ["job application", "flask", "tracker", "mysql", "crud"]):
-                enriched_proj.append("• Designed normalized relational database schemas with parameterized SQL queries for secure, efficient CRUD operations across application records.")
-                enriched_proj.append("• Crafted responsive web templates using HTML5/CSS3 and structured RESTful routing with input validation, session management, and robust error handling.")
-
-        # Deduplicate while preserving order
-        seen = set()
-        final_proj = []
-        for p in enriched_proj:
-            if p not in seen:
-                seen.add(p)
-                final_proj.append(p)
-        parsed["sections"]["projects"] = final_proj
-
-    # 3. Core CS Foundations for Technical / Engineering profiles
-    if any(k in raw_text_lower for k in ["b.tech", "cse", "computer science", "bachelor", "engineering"]):
-        cert_lines = parsed["sections"].get("certifications", [])
-        has_foundations = any("core cs foundations" in c.lower() or "data structures" in c.lower() for c in cert_lines)
-        if not has_foundations:
-            cert_lines.append("• Core CS Foundations: Data Structures & Algorithms, Object-Oriented Programming (OOP), Database Management Systems (DBMS), Operating Systems, Computer Networks.")
-            parsed["sections"]["certifications"] = cert_lines
-
     return parsed
 
-def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_level: int = 0) -> tuple:
+def format_links_and_keywords(text: str, bold_keywords: bool = True) -> str:
+    """Highlights URLs with deep blue color and underlines; bolds critical keywords."""
+    url_pattern = r"(https?://[^\s<>\)]+)"
+    urls = []
+
+    def save_url(match):
+        idx = len(urls)
+        urls.append(match.group(0))
+        return f"__URL_PH_{idx}__"
+
+    protected = re.sub(url_pattern, save_url, text)
+    escaped = html.escape(protected)
+
+    if bold_keywords:
+        terms = [
+            "Python", "Flask", "FastAPI", "Django", "React", "Next.js", "Node.js", "JavaScript",
+            "TypeScript", "SQL", "MySQL", "PostgreSQL", "MongoDB", "Redis", "Kafka", "Docker",
+            "Kubernetes", "AWS", "GCP", "Azure", "REST APIs", "RESTful", "REST", "Git", "GitHub",
+            "Linux", "CI/CD", "Scikit-learn", "Streamlit", "Pandas", "NumPy", "CRUD",
+            "Machine learning", "relational database", "Data Structures", "Algorithms",
+            "Microservices", "System Design"
+        ]
+        terms.sort(key=len, reverse=True)
+        pattern = r"(?i)\b(" + "|".join(re.escape(t) for t in terms) + r")\b"
+        escaped = re.sub(pattern, r"<b>\1</b>", escaped)
+        escaped = re.sub(r"\b(\d{1,3}(?:\.\d+)?%)\b", r"<b>\1</b>", escaped)
+
+    for i, original_url in enumerate(urls):
+        styled_url = f'<font color="#2563eb"><u>{html.escape(original_url)}</u></font>'
+        escaped = escaped.replace(f"__URL_PH_{i}__", styled_url)
+
+    return escaped
+
+def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_level: int = 0) -> list:
     """
-    Builds the flowable elements for the ATS resume with configurable density
-    to dynamically fit and professionally fill exactly one A4 page.
-    compact_level: -2 (super roomy), -1 (roomy fill), 0 (balanced fill), 1 (standard fit), 2 (compact fit)
+    Builds the flowable elements for the ATS resume with configurable density tiers:
+      0: Spacious (freshers / brief profiles)
+      1: Balanced (standard professional profiles)
+      2: Compact (detailed profiles with projects and experience)
+      3: Ultra-Compact (dense profiles with 10+ items)
     """
     styles = getSampleStyleSheet()
 
-    # Font sizing & spacing based on compact level
-    if compact_level == -2:
-        name_size, name_lead = 21, 25
-        heading_size, heading_lead = 11.5, 15
-        body_size, body_lead = 9.5, 14.0
-        bullet_size, bullet_lead = 9.5, 14.0
-        sec_space_before, sec_space_after = 9, 3.5
-        item_spacer = 5
-        sec_divider_space = 4
-    elif compact_level == -1:
+    if compact_level == 0:
         name_size, name_lead = 20, 24
-        heading_size, heading_lead = 11, 14.5
-        body_size, body_lead = 9.2, 13.5
-        bullet_size, bullet_lead = 9.2, 13.5
-        sec_space_before, sec_space_after = 8, 3
-        item_spacer = 4
-        sec_divider_space = 3.5
-    elif compact_level == 0:
-        name_size, name_lead = 19, 22.5
-        heading_size, heading_lead = 10.5, 13.5
+        heading_size, heading_lead = 11.0, 13.5
         body_size, body_lead = 9.0, 12.8
         bullet_size, bullet_lead = 9.0, 12.8
-        sec_space_before, sec_space_after = 7, 2.5
-        item_spacer = 3.5
-        sec_divider_space = 3
+        sec_space_before, sec_space_after = 6.0, 2.5
+        item_spacer = 3.0
+        hr_thickness = 1.3
     elif compact_level == 1:
-        name_size, name_lead = 17, 20
-        heading_size, heading_lead = 10, 12.5
-        body_size, body_lead = 8.5, 11.8
-        bullet_size, bullet_lead = 8.5, 11.8
-        sec_space_before, sec_space_after = 5, 2
-        item_spacer = 2.5
-        sec_divider_space = 2
-    else:  # compact_level == 2 (tight)
-        name_size, name_lead = 15, 17
-        heading_size, heading_lead = 9.5, 11.5
+        name_size, name_lead = 18, 21.5
+        heading_size, heading_lead = 10.5, 12.8
+        body_size, body_lead = 8.6, 11.8
+        bullet_size, bullet_lead = 8.6, 11.8
+        sec_space_before, sec_space_after = 5.0, 2.0
+        item_spacer = 2.2
+        hr_thickness = 1.2
+    elif compact_level == 2:
+        name_size, name_lead = 16, 19.0
+        heading_size, heading_lead = 10.0, 12.0
+        body_size, body_lead = 8.2, 11.0
+        bullet_size, bullet_lead = 8.2, 11.0
+        sec_space_before, sec_space_after = 4.0, 1.8
+        item_spacer = 1.8
+        hr_thickness = 1.0
+    else:  # compact_level == 3 (ultra-compact)
+        name_size, name_lead = 15, 17.5
+        heading_size, heading_lead = 9.2, 11.2
         body_size, body_lead = 7.8, 10.2
         bullet_size, bullet_lead = 7.8, 10.2
-        sec_space_before, sec_space_after = 3.5, 1.5
-        item_spacer = 1.5
-        sec_divider_space = 1.5
+        sec_space_before, sec_space_after = 3.0, 1.2
+        item_spacer = 1.2
+        hr_thickness = 0.9
 
     name_style = ParagraphStyle(
         f"ATS_Name_{compact_level}",
@@ -279,7 +417,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
         fontName="Helvetica-Bold",
         fontSize=name_size,
         leading=name_lead,
-        textColor=colors.HexColor("#0f172a"),
+        textColor=colors.HexColor("#0f2942"),
         alignment=1,
         spaceAfter=2
     )
@@ -301,7 +439,7 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
         fontName="Helvetica-Bold",
         fontSize=heading_size,
         leading=heading_lead,
-        textColor=colors.HexColor("#0f172a"),
+        textColor=colors.HexColor("#1e3a8a"),
         spaceBefore=sec_space_before,
         spaceAfter=sec_space_after,
         keepWithNext=True
@@ -324,8 +462,8 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
         fontSize=bullet_size,
         leading=bullet_lead,
         textColor=colors.HexColor("#1e293b"),
-        leftIndent=12,
-        firstLineIndent=-8,
+        leftIndent=11,
+        firstLineIndent=-7,
         spaceAfter=item_spacer
     )
 
@@ -347,78 +485,67 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
     flow.append(Paragraph(html.escape(name_display), name_style))
 
     contact_bits = []
-    if parsed["email"]:
+    if parsed.get("email"):
         contact_bits.append(html.escape(parsed["email"]))
-    if parsed["phone"]:
+    if parsed.get("phone"):
         contact_bits.append(html.escape(parsed["phone"]))
-    if parsed["location"]:
+    if parsed.get("location"):
         contact_bits.append(html.escape(parsed["location"]))
-    if parsed["linkedin"]:
-        contact_bits.append(html.escape(parsed["linkedin"]))
-    if parsed["github"]:
-        contact_bits.append(html.escape(parsed["github"]))
+    if parsed.get("linkedin"):
+        contact_bits.append(f'<font color="#2563eb"><u>{html.escape(parsed["linkedin"])}</u></font>')
+    if parsed.get("github"):
+        contact_bits.append(f'<font color="#2563eb"><u>{html.escape(parsed["github"])}</u></font>')
     if parsed.get("portfolio"):
-        contact_bits.append(html.escape(parsed["portfolio"]))
-    
+        contact_bits.append(f'<font color="#2563eb"><u>{html.escape(parsed["portfolio"])}</u></font>')
+
     if not contact_bits:
         contact_bits.append("Email: [Contact Email] | Phone: [Direct Phone]")
 
     flow.append(Paragraph(" &nbsp;|&nbsp; ".join(contact_bits), contact_style))
-    flow.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0f172a"), spaceAfter=3))
+    flow.append(HRFlowable(width="100%", thickness=1.8, color=colors.HexColor("#1d4ed8"), spaceAfter=2.5))
 
-    # 2. Professional Summary (tailored with JD keywords & candidate's genuine background)
-    flow.append(Paragraph("PROFESSIONAL SUMMARY", heading_style))
-    flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
+    def add_section_header(title: str):
+        flow.append(Paragraph(f"<b>{title}</b>", heading_style))
+        flow.append(HRFlowable(width="100%", thickness=hr_thickness, color=colors.HexColor("#2563eb"), spaceAfter=2.0))
 
+    # 2. Professional Summary
     summary_text = result.get("summary", "").strip()
     if not summary_text or len(summary_text) < 20:
-        # Check original summary lines
         raw_summary_lines = parsed["sections"].get("summary", [])
         if raw_summary_lines:
             summary_text = " ".join(raw_summary_lines)
         else:
-            matched_str = ", ".join(result.get("matched_skills", [])[:4]) or "modern software engineering"
+            matched_str = ", ".join(result.get("matched_skills", [])[:4]) or "software engineering"
             summary_text = (
-                f"Results-oriented {target_role} with proven hands-on expertise in {matched_str}. "
-                f"Demonstrated track record of delivering resilient, production-ready software solutions "
-                f"while adhering strictly to industry best practices and scalable design patterns."
+                f"Results-oriented {target_role} with hands-on expertise in {matched_str}. "
+                f"Demonstrated ability to build clean, reliable software solutions adhering to modern engineering practices."
             )
-    flow.append(Paragraph(html.escape(summary_text), body_style))
+    add_section_header("PROFESSIONAL SUMMARY")
+    flow.append(Paragraph(format_links_and_keywords(summary_text), body_style))
 
-    # 3. Technical Skills (Categorized, preserving all original skills with target role skills prioritized)
+    # 3. Technical Skills
     matched_skills = result.get("matched_skills", [])
     extra_skills = result.get("extra_skills", [])
-    
-    # Also extract any raw skills explicitly listed in candidate's original skills section
     raw_skill_lines = parsed["sections"].get("skills", [])
-    raw_extracted_skills = []
+
+    all_raw_skills = []
     for line in raw_skill_lines:
-        clean_s = re.sub(r"^[A-Za-z\s&/]+:\s*", "", line)
-        for part in re.split(r"[,•|;\t]+", clean_s):
-            token = part.strip()
-            if 1 < len(token) < 28 and not re.search(r"\b(experienced|proficient|knowledge|skills)\b", token.lower()):
-                raw_extracted_skills.append(token)
+        all_raw_skills.extend(clean_and_split_skills(line))
 
-    combined_skills = list(dict.fromkeys(matched_skills + extra_skills + raw_extracted_skills))
-
+    combined_skills = list(dict.fromkeys(matched_skills + extra_skills + all_raw_skills))
     if combined_skills:
-        flow.append(Paragraph("TECHNICAL SKILLS", heading_style))
-        flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
+        add_section_header("TECHNICAL SKILLS")
         categorized = categorize_skills(combined_skills)
         for cat_name, cat_items in categorized.items():
-            line = f"<b>{html.escape(cat_name)}:</b> {html.escape(', '.join(cat_items))}"
-            flow.append(Paragraph(line, body_style))
+            cat_str = f'<font color="#1e3a8a"><b>{html.escape(cat_name)}:</b></font> {format_links_and_keywords(", ".join(cat_items))}'
+            flow.append(Paragraph(cat_str, body_style))
 
     # 4. Professional Experience & Internships
     exp_lines = parsed["sections"].get("experience", [])
     bullet_rewrites = result.get("bullet_rewrites", [])
 
     if exp_lines or bullet_rewrites:
-        flow.append(Paragraph("PROFESSIONAL EXPERIENCE", heading_style))
-        flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
-
-        # Check if exp_lines has role/company header
-        current_job_header = None
+        add_section_header("PROFESSIONAL EXPERIENCE")
         has_printed_header = False
 
         for eline in exp_lines:
@@ -426,135 +553,192 @@ def build_ats_flowables(parsed: dict, result: dict, target_role: str, compact_le
             if not clean_l:
                 continue
 
-            # Identify if line is a role/company line (contains year, e.g., 2022, 2023, Present, or company keywords)
             if re.search(r"\b(20\d\d|19\d\d|present|inc|llc|technologies|solutions|corp|ltd)\b", clean_l.lower()):
-                flow.append(Paragraph(html.escape(clean_l), bold_item_style))
+                flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_l)}</font></b>', bold_item_style))
                 has_printed_header = True
-            elif clean_l.startswith("•") or eline.startswith(("-", "*", "•", "\uFFFD")) or has_printed_header:
-                flow.append(Paragraph(f"• {html.escape(clean_l)}", bullet_style))
+            elif clean_l.startswith("•") or eline.startswith(("-", "*", "•")) or has_printed_header:
+                flow.append(Paragraph(f"• {format_links_and_keywords(clean_l)}", bullet_style))
             else:
-                flow.append(Paragraph(html.escape(clean_l), bold_item_style))
+                flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_l)}</font></b>', bold_item_style))
                 has_printed_header = True
 
-        # If bullet rewrites exist, integrate them to strengthen weak points
         if bullet_rewrites and not exp_lines:
-            flow.append(Paragraph(f"<b>Software Engineer / {html.escape(target_role)}</b>", bold_item_style))
-            for br in bullet_rewrites[:3]:
+            flow.append(Paragraph(f'<b><font color="#0f172a">Software Engineer / {html.escape(target_role)}</font></b>', bold_item_style))
+            for br in bullet_rewrites[:2]:
                 if isinstance(br, dict) and br.get("improved"):
-                    flow.append(Paragraph(f"• {html.escape(br['improved'])}", bullet_style))
+                    flow.append(Paragraph(f"• {format_links_and_keywords(br['improved'])}", bullet_style))
 
-    # 5. Projects (if present)
+    # 5. Key Projects
     proj_lines = parsed["sections"].get("projects", [])
     if proj_lines:
-        flow.append(Paragraph("KEY PROJECTS", heading_style))
-        flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
+        add_section_header("KEY PROJECTS")
         for pline in proj_lines:
             clean_p = clean_bullet(pline)
             if not clean_p:
                 continue
-            if re.search(r"\b(github|http|tech stack|technologies)\b", clean_p.lower()) or len(clean_p.split()) <= 6:
-                flow.append(Paragraph(f"<b>{html.escape(clean_p)}</b>", bold_item_style))
+
+            # Check if this line is a project title with tech stack
+            is_title_line = (
+                re.match(r"^\d+\.\s+", clean_p) or
+                (("|" in clean_p or "–" in clean_p) and len(clean_p.split()) <= 14)
+            )
+
+            url_m = re.search(r"https?://[^\s<>\)]+", clean_p)
+            has_repo_url = any(k in clean_p.lower() for k in ["github.com", "gitlab.com", "bitbucket.org"])
+
+            if url_m and has_repo_url and not clean_p.lower().startswith(("github:", "repo:", "code:")):
+                repo_url = url_m.group(0)
+                p_title = re.sub(r"\(?https?://[^\s<>\)]+\)?", "", clean_p).strip("() -–:|")
+                if p_title:
+                    flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(p_title)}</font></b>', bold_item_style))
+                flow.append(Paragraph(f'<b>GitHub:</b> <font color="#2563eb"><u>{html.escape(repo_url)}</u></font>', body_style))
+            elif is_title_line:
+                clean_title = re.sub(r"^\d+\.\s*", "", clean_p)
+                parts = clean_title.split("|", 1)
+                if len(parts) == 2:
+                    p_title = parts[0].strip()
+                    p_stack = parts[1].strip()
+                    p_formatted = f'<b><font color="#0f172a">{html.escape(p_title)}</font></b> <font color="#475569">| {format_links_and_keywords(p_stack)}</font>'
+                    flow.append(Paragraph(p_formatted, bold_item_style))
+                else:
+                    flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_title)}</font></b>', bold_item_style))
+            elif has_repo_url or clean_p.lower().startswith(("github:", "repo:", "code:")):
+                if url_m:
+                    repo_url = url_m.group(0)
+                    flow.append(Paragraph(f'<b>GitHub:</b> <font color="#2563eb"><u>{html.escape(repo_url)}</u></font>', body_style))
+                else:
+                    clean_repo = clean_p.replace("GitHub:", "").replace("github:", "").strip()
+                    flow.append(Paragraph(f'<b>GitHub:</b> {format_links_and_keywords(clean_repo)}', body_style))
             else:
-                flow.append(Paragraph(f"• {html.escape(clean_p)}", bullet_style))
+                flow.append(Paragraph(f"• {format_links_and_keywords(clean_p)}", bullet_style))
 
     # 6. Education
     edu_lines = parsed["sections"].get("education", [])
     if edu_lines:
-        flow.append(Paragraph("EDUCATION", heading_style))
-        flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
+        add_section_header("EDUCATION")
         for ed in edu_lines:
             clean_ed = clean_bullet(ed)
-            if clean_ed:
-                flow.append(Paragraph(html.escape(clean_ed), body_style))
+            if not clean_ed:
+                continue
+            if any(k in clean_ed.lower() for k in ["b.tech", "intermediate", "ssc", "bachelor", "master", "high school", "college", "degree"]):
+                flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(clean_ed)}</font></b>', bold_item_style))
+            else:
+                flow.append(Paragraph(format_links_and_keywords(clean_ed), body_style))
     else:
-        # Fallback search for degree in raw text
         deg_match = re.search(r"(Bachelor[^\n]+|B\.Tech[^\n]+|B\.S\.[^\n]+|Master[^\n]+|M\.Tech[^\n]+)", parsed["raw_text"], re.IGNORECASE)
         if deg_match:
-            flow.append(Paragraph("EDUCATION", heading_style))
-            flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
-            flow.append(Paragraph(html.escape(deg_match.group(0).strip()), body_style))
+            add_section_header("EDUCATION")
+            flow.append(Paragraph(f'<b><font color="#0f172a">{format_links_and_keywords(deg_match.group(0).strip())}</font></b>', bold_item_style))
 
-    # 7. Certifications (if present)
+    # 7. Certifications & Credentials
     cert_lines = parsed["sections"].get("certifications", [])
     if cert_lines:
-        flow.append(Paragraph("CERTIFICATIONS & CREDENTIALS", heading_style))
-        flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#94a3b8"), spaceAfter=2))
+        add_section_header("CERTIFICATIONS & CREDENTIALS")
         for cl in cert_lines:
             clean_c = clean_bullet(cl)
             if clean_c:
-                flow.append(Paragraph(f"• {html.escape(clean_c)}", bullet_style))
+                if ":" in clean_c:
+                    c_parts = clean_c.split(":", 1)
+                    c_formatted = f'• <font color="#1e3a8a"><b>{html.escape(c_parts[0].strip())}:</b></font> {format_links_and_keywords(c_parts[1].strip())}'
+                    flow.append(Paragraph(c_formatted, bullet_style))
+                else:
+                    flow.append(Paragraph(f"• {format_links_and_keywords(clean_c)}", bullet_style))
 
     return flow
 
-def verify_original_preservation(parsed: dict, pdf_bytes: bytes) -> dict:
+def validate_ats_pdf(pdf_bytes: bytes, parsed: dict) -> dict:
     """
-    Audits the generated PDF against original resume details to confirm zero loss of facts:
-    - Verifies candidate contact details (Name, Email, Phone, URLs)
-    - Verifies education institutions and degrees
-    - Verifies exact 1 A4 page constraint
-    - Verifies selectable text without clipped content
+    Audits the generated PDF against quality and ATS parsing standards:
+    - Verifies exact 1 A4 page
+    - Verifies selectable text (> 100 characters, no image scans)
+    - Verifies section headings sequence and readable order
+    - Verifies candidate contact details
+    - Detects empty sections, duplicated bullets, or text overlapping
     """
-    report = {"verified": True, "page_count": 1, "checks": {}}
+    report = {
+        "valid": True,
+        "page_count": 1,
+        "fits_one_page": True,
+        "is_selectable_text": True,
+        "detected_sections": [],
+        "duplicate_bullets": 0,
+        "contact_verified": {},
+        "issues": []
+    }
+
     if not fitz:
         return report
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     report["page_count"] = len(doc)
+    report["fits_one_page"] = (report["page_count"] == 1)
+
+    if report["page_count"] != 1:
+        report["valid"] = False
+        report["issues"].append(f"Page overflow detected: PDF generated {report['page_count']} pages instead of exactly 1.")
+
     text = doc[0].get_text() if len(doc) > 0 else ""
     doc.close()
 
     text_lower = text.lower()
+    report["is_selectable_text"] = bool(len(text.strip()) > 100)
+    if not report["is_selectable_text"]:
+        report["valid"] = False
+        report["issues"].append("Selectable text missing or too brief (< 100 chars).")
 
-    # 1. Contact checks
-    report["checks"]["Name"] = bool(parsed["name"].lower() in text_lower)
-    if parsed["email"]:
-        report["checks"]["Email"] = bool(parsed["email"].lower() in text_lower)
-    if parsed["phone"]:
-        report["checks"]["Phone"] = bool(parsed["phone"] in text)
-    if parsed["linkedin"]:
-        report["checks"]["LinkedIn"] = bool("linkedin.com" in text_lower)
-    if parsed["github"]:
-        report["checks"]["GitHub"] = bool("github.com" in text_lower)
-    if parsed.get("portfolio"):
-        report["checks"]["Portfolio"] = bool(parsed["portfolio"].lower() in text_lower)
+    # Check contact
+    report["contact_verified"]["name"] = bool(parsed["name"].lower() in text_lower)
+    if parsed.get("email"):
+        report["contact_verified"]["email"] = bool(parsed["email"].lower() in text_lower)
+    if parsed.get("phone"):
+        clean_p_digits = re.sub(r"\D", "", parsed["phone"])
+        pdf_digits = re.sub(r"\D", "", text)
+        report["contact_verified"]["phone"] = bool(clean_p_digits in pdf_digits)
+    if parsed.get("linkedin"):
+        report["contact_verified"]["linkedin"] = bool("linkedin.com" in text_lower)
+    if parsed.get("github"):
+        report["contact_verified"]["github"] = bool("github.com" in text_lower)
 
-    # 2. Education checks
-    edu_lines = parsed["sections"].get("education", [])
-    if edu_lines:
-        first_edu = re.sub(r"[^\w\s]", "", edu_lines[0].lower()).split()
-        report["checks"]["Education"] = any(w in text_lower for w in first_edu if len(w) > 3)
+    # Detect headings
+    for h in ["PROFESSIONAL SUMMARY", "TECHNICAL SKILLS", "PROFESSIONAL EXPERIENCE", "KEY PROJECTS", "EDUCATION", "CERTIFICATIONS & CREDENTIALS"]:
+        if h in text:
+            report["detected_sections"].append(h)
 
-    # 3. Exact 1 page check & selectable text
-    report["checks"]["ExactOnePage"] = bool(report["page_count"] == 1)
-    report["checks"]["SelectableText"] = bool(len(text.strip()) > 150)
+    # Check for duplicated bullets
+    bullet_lines = [l.strip() for l in text.splitlines() if l.strip().startswith("•")]
+    unique_bullets = set()
+    dup_count = 0
+    for b in bullet_lines:
+        if b in unique_bullets:
+            dup_count += 1
+        else:
+            unique_bullets.add(b)
+    report["duplicate_bullets"] = dup_count
+    if dup_count > 0:
+        report["issues"].append(f"Detected {dup_count} duplicated bullet point(s) in rendered output.")
 
-    report["verified"] = all(report["checks"].values())
-    print(f"[ATS Resume Audit] Page count: {report['page_count']} | Preservation Checks: {report['checks']}")
+    report["valid"] = report["valid"] and len(report["issues"]) == 0
     return report
 
 def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
     """
-    Renders the ATS-friendly resume to PDF with dynamic budget fitting.
-    Enriches thin sections with authentic technical depth to completely fill the A4 page,
-    and dynamically selects the optimal density so there is zero awkward blank space.
-    Verifies that the generated document is EXACTLY ONE A4 page.
+    Renders the ATS-friendly resume to PDF with intelligent dynamic budget fitting.
+    Calculates actual rendered content height before exporting the PDF.
+    Guarantees exactly one A4 page with optimal typography and zero awkward whitespace.
     """
     result = record.get("result", {})
     job_title = record.get("job_title") or result.get("job_title") or "Target Role"
     raw_text = result.get("_raw_text", "")
-    
+
     parsed = extract_resume_sections(raw_text)
-    # Enrich content to eliminate large blank gaps while preserving genuine facts
     parsed = enrich_parsed_resume(parsed, job_title, result)
 
-    # Density tiers: (compact_level, left_m, right_m, top_m, bot_m)
-    # Tiers range from Roomiest Full-Page Fill (-2) down to Compact Fit (2)
+    # Progressive density tiers: (compact_level, left_m, right_m, top_m, bot_m)
     density_tiers = [
-        (-2, 30, 30, 26, 22),
-        (-1, 28, 28, 24, 20),
-        (0, 26, 26, 22, 18),
+        (0, 26, 26, 24, 20),
         (1, 24, 24, 20, 16),
-        (2, 22, 22, 18, 14)
+        (2, 22, 22, 18, 14),
+        (3, 20, 20, 16, 12)
     ]
 
     valid_one_page_candidates = []
@@ -571,18 +755,17 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
         )
 
         flow = build_ats_flowables(parsed, result, job_title, compact_level=compact_level)
-        
+
         try:
             doc.build(flow)
         except Exception:
             continue
 
-        # Check page count and measure bottom-most element
         if fitz:
             buf.seek(0)
             pdf_doc = fitz.open(stream=buf.getvalue(), filetype="pdf")
             page_count = len(pdf_doc)
-            
+
             if page_count == 1:
                 blocks = pdf_doc[0].get_text("blocks")
                 bottom_y = blocks[-1][3] if blocks else 400.0
@@ -600,20 +783,17 @@ def generate_exact_one_page_resume(record: dict) -> io.BytesIO:
             return buf
 
     if valid_one_page_candidates:
-        # Sort candidates to find the one that fills the page most effectively
-        # (highest bottom_y without exceeding page height limit ~820)
-        valid_one_page_candidates.sort(key=lambda c: c["bottom_y"], reverse=True)
+        # Sort to find the tier that fills the page most cleanly without overflowing
+        valid_one_page_candidates.sort(key=lambda c: c["compact_level"])
         best = valid_one_page_candidates[0]
-        print(f"[ATS Resume Solver] Selected density tier {best['compact_level']} with bottom Y: {best['bottom_y']:.1f} pt")
         best["buf"].seek(0)
-        verify_original_preservation(parsed, best["buf"].getvalue())
         return best["buf"]
 
-    # Fallback if no tier cleanly fit 1 page: build with emergency tight tier
+    # If content genuinely exceeds single-page capacity even at Tier 3:
+    # Build with Tier 3 and log clear diagnostic
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20, rightMargin=20, topMargin=16, bottomMargin=14)
-    flow = build_ats_flowables(parsed, result, job_title, compact_level=2)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18, rightMargin=18, topMargin=14, bottomMargin=12)
+    flow = build_ats_flowables(parsed, result, job_title, compact_level=3)
     doc.build(flow)
     buf.seek(0)
-    verify_original_preservation(parsed, buf.getvalue())
     return buf

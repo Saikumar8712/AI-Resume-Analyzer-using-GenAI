@@ -156,5 +156,159 @@ Certifications
         
         doc.close()
 
+    def test_madhankumar_exact_one_page_and_no_degree_in_contact(self):
+        madhan_resume = """MADHANKUMAR ONTEDDUBANDI
+madhankumar.onteddubandi@gmail.com | +91 6303555193 | Kurnool, AP | https://www.linkedin.com/in/madhankumaronteddubandi | https://github.com/MadhanBlastz
+PROFESSIONAL SUMMARY
+Results-oriented Python Backend Developer with proven hands-on expertise in Flask, Git, Python, REST APIs. Demonstrated track record of delivering resilient, production-ready software solutions while adhering strictly to industry best practices and scalable design patterns.
+TECHNICAL SKILLS
+Languages & Core: Python, SQL, HTML/CSS, JavaScript
+SQL / MySQL (Queries, CRUD Operations, Filtering)
+HTML, CSS, Flask (Routing, Templates, CRUD)
+GitHub (Version Control, Repository Management)
+Linux (Basic Commands, File Navigation, File Management)
+INTERNSHIPS
+KEY PROJECTS
+1. Water Quality Index Predictor | Python, Scikit-learn, Pandas, Streamlit
+GitHub: https://github.com/MadhanBlastz/Water-Quality-Index-Predictor
+Built an interactive machine learning web application using Scikit-learn and Streamlit to analyze and predict water potability from environmental parameters.
+2. Job Application Tracker | HTML, CSS, Python, Flask, MySQL
+GitHub: https://github.com/MadhanBlastz/Job-Application-Tracker
+Developed a web-based job tracking application that allows users to add, update, and manage job roles,
+application dates, and application status using Flask and MySQL.
+EDUCATION
+B.Tech in CSE, Vemu Institute of Technology, P. Kothakota, Chittoor Dist.
+2022 – 2026 | 77%
+Intermediate (MPC), A.P Model college, Dhone Town, Kurnool Dist.
+2020 – 2022 | 66%
+SSC, ZP High School, Dhone Town, Kurnool Dist.
+2020 | 93%
+CERTIFICATIONS & CREDENTIALS
+Python for Data Science - Coursera
+"""
+        record = {
+            "job_title": "Python Backend Developer",
+            "result": {
+                "job_title": "Python Backend Developer",
+                "matched_skills": ["Python", "SQL", "Flask", "REST APIs", "Git"],
+                "extra_skills": ["HTML/CSS", "JavaScript", "Linux", "Machine learning", "Pandas"],
+                "_raw_text": madhan_resume
+            }
+        }
+        buf = one_page_ats_resume.generate_exact_one_page_resume(record)
+        doc = fitz.open(stream=buf.getvalue(), filetype="pdf")
+        
+        # 1. Exactly 1 A4 page
+        self.assertEqual(len(doc), 1, f"Resume must be exactly 1 page, found {len(doc)}")
+        
+        # 2. Extract and validate text
+        text = doc[0].get_text()
+        self.assertIn("MADHANKUMAR ONTEDDUBANDI", text.upper())
+        self.assertIn("madhankumar.onteddubandi@gmail.com", text)
+        self.assertIn("6303555193", text)
+        self.assertIn("Kurnool, AP", text)
+        
+        # 3. B.Tech must NOT be in contact header
+        header_text = text.split("PROFESSIONAL SUMMARY")[0]
+        self.assertNotIn("B.Tech", header_text, "B.Tech degree must not be placed in contact links!")
+        
+        # 4. Technical skills must be cleaned and categorized
+        skills_text = text.split("TECHNICAL SKILLS")[1].split("KEY PROJECTS")[0]
+        self.assertNotIn("INTERNSHIPS", skills_text, "INTERNSHIPS header must not appear as a skill!")
+        self.assertNotIn("(Queries, CRUD Operations, Filtering)", skills_text)
+        
+        # 5. Validation helper passes
+        parsed = one_page_ats_resume.extract_resume_sections(madhan_resume)
+        val = one_page_ats_resume.validate_ats_pdf(buf.getvalue(), parsed)
+        self.assertTrue(val["valid"])
+        self.assertTrue(val["fits_one_page"])
+        self.assertTrue(val["is_selectable_text"])
+        self.assertEqual(val["duplicate_bullets"], 0)
+        doc.close()
+
+    def test_transparent_scoring_and_partial_skills_matching(self):
+        import analyzer
+        resume = """Candidate Developer
+cand@example.com | 555-1234
+Summary: Python developer skilled in Flask, MySQL, and Docker.
+Skills: Python, Flask, SQL, MySQL, Docker, Linux, Git
+Experience:
+Software Engineer at Acme Corp (2022 - Present)
+• Developed backend services reducing response time by 40%.
+• Built containerized workflows saving 12 hours weekly.
+Education: BS in Computer Science, 2021
+"""
+        # JD asks for FastAPI (candidate has Flask), PostgreSQL (candidate has SQL/MySQL), and Kubernetes (missing)
+        jd = "Seeking Backend Engineer proficient in Python, FastAPI, PostgreSQL, and Kubernetes."
+        result = analyzer.analyze(resume, jd, job_title="Backend Engineer")
+        
+        # 1. Matched, Partial, and Missing categorization
+        self.assertIn("Python", result["matched_skills"])
+        partial_skill_names = [p["skill"] for p in result["partially_matched_skills"]]
+        self.assertIn("FastAPI", partial_skill_names)
+        self.assertIn("missing_skills", result)
+        
+        # 2. Transparent 3-score architecture
+        self.assertIn("resume_quality_score", result)
+        self.assertIn("job_match_score", result)
+        self.assertIn("formatting_score", result)
+        self.assertIn("score_reasons", result)
+        
+        # 3. Deterministic repeatability: repeated analysis yields identical scores
+        repeat_result = analyzer.analyze(resume, jd, job_title="Backend Engineer")
+        self.assertEqual(result["resume_quality_score"], repeat_result["resume_quality_score"])
+        self.assertEqual(result["job_match_score"], repeat_result["job_match_score"])
+        self.assertEqual(result["formatting_score"], repeat_result["formatting_score"])
+
+    def test_general_purpose_resume_mode_when_no_jd_provided(self):
+        import analyzer
+        resume = """Jane Developer
+jane@example.com | +1 555-0100
+Summary: Full stack developer with expertise in React, Node.js, and PostgreSQL.
+Skills: JavaScript, TypeScript, React, Node.js, SQL, Git
+Experience:
+Full Stack Engineer at WebCo (2021 - Present)
+• Architected scalable web services handling 10,000+ daily active users.
+• Increased frontend test coverage by 30%.
+Education: B.S. in Computer Science, 2021
+"""
+        # Blank / omitted JD runs in general-purpose mode
+        result = analyzer.analyze(resume, "", job_title="Senior Developer")
+        self.assertTrue(result["is_general_purpose"])
+        self.assertGreaterEqual(result["resume_quality_score"], 60)
+        self.assertGreaterEqual(result["formatting_score"], 70)
+        self.assertGreater(len(result["matched_skills"]), 0)
+
+    def test_recruiter_review_dimensions_and_top_5_improvements(self):
+        import analyzer
+        resume = """Bob Smith - bob@example.com
+Education: B.Tech 2022
+Skills: Python, HTML/CSS
+Experience:
+Worked on web applications and updated databases.
+"""
+        result = analyzer.analyze(resume, "Python web developer with SQL and Docker.", job_title="Web Developer")
+        recruiter_review = result.get("recruiter_review", {})
+        
+        # Verify 7 dimensions present
+        dims = recruiter_review.get("dimensions", {})
+        self.assertIn("summary_clarity", dims)
+        self.assertIn("skills_relevance", dims)
+        self.assertIn("project_complexity", dims)
+        self.assertIn("experience_depth", dims)
+        self.assertIn("measurable_impact", dims)
+        self.assertIn("professionalism_consistency", dims)
+        self.assertIn("information_completeness", dims)
+        
+        # Verify Top 5 improvements
+        top_5 = recruiter_review.get("top_5_improvements", [])
+        self.assertEqual(len(top_5), 5)
+        for item in top_5:
+            self.assertIn("priority", item)
+            self.assertIn("title", item)
+            self.assertIn("observation", item)
+            self.assertIn("practical_example", item)
+
 if __name__ == "__main__":
     unittest.main()
+

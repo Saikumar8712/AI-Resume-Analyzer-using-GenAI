@@ -67,10 +67,8 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
   const submit = (e) => {
     e.preventDefault();
     if (!file) return setErr("Upload your resume as a PDF or Word (.docx) file.");
-    const jdClean = jd.trim();
-    if (jdClean.length < 2) return setErr("Job description is required (at least 2 characters).");
     setErr("");
-    onSubmit(file, jdClean, title.trim() || "Target Role");
+    onSubmit(file, jd.trim(), title.trim() || "Target Role");
   };
 
   const loadSample = (sample) => {
@@ -150,16 +148,16 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
 
       <label className="field-group">
         <div className="field-header">
-          <span className="field-label">Job Description</span>
-          <span className={`char-counter ${jd.trim().length < 2 ? "warn" : "ok"}`}>
-            {jd.trim().length}
+          <span className="field-label">Target Job Description <span className="field-opt">(optional — leave blank for general-purpose ATS resume)</span></span>
+          <span className={`char-counter ${jd.trim().length > 0 ? "ok" : "muted"}`}>
+            {jd.trim().length} chars
           </span>
         </div>
         <textarea
           rows="6"
           value={jd}
           onChange={(e) => setJd(e.target.value)}
-          placeholder="Paste requirements, responsibilities, or job description here..."
+          placeholder="Paste requirements, responsibilities, or target job description (optional)..."
           className="text-input textarea"
         />
       </label>
@@ -187,8 +185,10 @@ export default function UploadForm({ onSubmit, loading, onReset }) {
           <span className="btn-loading">
             <span className="spinner"></span> Analyzing Resume...
           </span>
+        ) : jd.trim() ? (
+          "⚡ Analyze Job Match"
         ) : (
-          "⚡ Analyze Resume Match"
+          "⚡ Optimize General-Purpose ATS Resume"
         )}
       </button>
     </form>
