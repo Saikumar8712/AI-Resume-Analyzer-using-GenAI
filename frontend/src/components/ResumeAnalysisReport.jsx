@@ -1,19 +1,28 @@
 import { useState, useEffect } from "react";
 import ScoreCard from "./ScoreCard.jsx";
 import SkillBadge from "./SkillBadge.jsx";
-import { pdfUrl, atsResumeUrl, getPdfValidation } from "../api.js";
+import MobileResumeDocView from "./MobileResumeDocView.jsx";
+import MobilePreviewModal from "./MobilePreviewModal.jsx";
+import { pdfUrl, atsResumeUrl, getPdfValidation, getResumeData } from "../api.js";
 
 export default function ResumeAnalysisReport({ data }) {
   const [tab, setTab] = useState("recruiter_review"); // Default to Recruiter Review Mode
   const [copiedSection, setCopiedSection] = useState("");
   const [pdfValidation, setPdfValidation] = useState(null);
   const [previewScale, setPreviewScale] = useState("fit"); // 'fit' | '100'
+  const [resumeData, setResumeData] = useState(null);
+  const [previewMode, setPreviewMode] = useState("doc"); // 'doc' (responsive mobile view) | 'pdf' (native embed)
+  const [showModalPreview, setShowModalPreview] = useState(false);
 
   useEffect(() => {
     if (data?.id) {
       getPdfValidation(data.id)
         .then((res) => setPdfValidation(res))
         .catch(() => setPdfValidation({ valid: true, fits_one_page: true, is_selectable_text: true, duplicate_bullets: 0 }));
+
+      getResumeData(data.id)
+        .then((res) => setResumeData(res))
+        .catch(() => setResumeData(null));
     }
   }, [data?.id]);
 
@@ -76,6 +85,38 @@ export default function ResumeAnalysisReport({ data }) {
         scoreReasons={data.score_reasons}
         isGeneralPurpose={Boolean(data.is_general_purpose)}
       />
+
+      {/* Mobile Quick Preview Action Banner */}
+      <div className="mobile-preview-quick-banner">
+        <div className="quick-banner-content">
+          <span className="quick-banner-icon">👁️</span>
+          <div className="quick-banner-text">
+            <strong>1-Page ATS Resume & Quality Audit Ready</strong>
+            <span>Guaranteed 1 A4 Page · Verified single-column format</span>
+          </div>
+        </div>
+        <div className="quick-banner-actions">
+          <button
+            type="button"
+            className="btn btn-primary glow-btn quick-preview-btn"
+            onClick={() => {
+              setTab("resume_preview");
+              setShowModalPreview(true);
+            }}
+          >
+            🔍 Open Mobile Preview
+          </button>
+          <a
+            className="btn btn-secondary quick-tab-btn"
+            href={atsResumeUrl(targetId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open ATS Resume PDF in a new browser tab"
+          >
+            ↗ PDF Tab
+          </a>
+        </div>
+      </div>
 
       {data.summary && (
         <div className="summary-banner">
@@ -289,19 +330,11 @@ export default function ResumeAnalysisReport({ data }) {
                 <div className="preview-action-group">
                   <button
                     type="button"
-                    className={`scale-btn ${previewScale === "fit" ? "active" : ""}`}
-                    onClick={() => setPreviewScale("fit")}
-                    title="Scale preview to fit container"
+                    className="btn btn-primary glow-btn mobile-preview-launch-btn"
+                    onClick={() => setShowModalPreview(true)}
+                    title="Open full-screen mobile preview with zoom & controls"
                   >
-                    Fit Width
-                  </button>
-                  <button
-                    type="button"
-                    className={`scale-btn ${previewScale === "100" ? "active" : ""}`}
-                    onClick={() => setPreviewScale("100")}
-                    title="View at 100% full scale"
-                  >
-                    100% Scale
+                    🔍 Fullscreen Mobile Preview
                   </button>
                   <a
                     className="btn btn-secondary glow-btn"
@@ -321,6 +354,31 @@ export default function ResumeAnalysisReport({ data }) {
                     📄 Download 1-Page Resume PDF
                   </a>
                 </div>
+              </div>
+
+              {/* View Mode Switcher between Responsive Mobile Document View and Native PDF Embed */}
+              <div className="preview-view-mode-bar">
+                <div className="view-mode-pills">
+                  <button
+                    type="button"
+                    className={`view-mode-pill ${previewMode === "doc" ? "active" : ""}`}
+                    onClick={() => setPreviewMode("doc")}
+                  >
+                    📱 Mobile Document View (Instant & Crisp)
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-mode-pill ${previewMode === "pdf" ? "active" : ""}`}
+                    onClick={() => setPreviewMode("pdf")}
+                  >
+                    📑 Direct PDF Embed
+                  </button>
+                </div>
+                <span className="view-mode-hint">
+                  {previewMode === "doc"
+                    ? "✓ Formatted for mobile screens & touch devices (zero plugin lag)"
+                    : "ℹ️ Embedded browser PDF viewer (desktop recommended)"}
+                </span>
               </div>
             </div>
 
@@ -358,29 +416,55 @@ export default function ResumeAnalysisReport({ data }) {
               </div>
             )}
 
-            {/* Responsive PDF Viewer Frame */}
-            <div className={`resume-frame-wrapper scale-${previewScale}`}>
-              <object
-                data={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
-                type="application/pdf"
-                className="resume-pdf-iframe"
-                aria-label="1-Page ATS Resume PDF Preview"
-              >
-                <iframe
-                  title="1-Page ATS Resume PDF Preview"
-                  src={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
+            {/* Dual Display: Mobile Document View OR PDF Embed Frame */}
+            {previewMode === "doc" ? (
+              <div className="resume-doc-section">
+                <MobileResumeDocView
+                  resumeData={resumeData}
+                  fallbackData={data}
+                  targetId={targetId}
+                />
+              </div>
+            ) : (
+              <div className={`resume-frame-wrapper scale-${previewScale}`}>
+                <object
+                  data={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
+                  type="application/pdf"
                   className="resume-pdf-iframe"
-                  loading="lazy"
+                  aria-label="1-Page ATS Resume PDF Preview"
                 >
-                  <div className="pdf-fallback-msg" style={{ padding: "20px", textAlign: "center", color: "#fff" }}>
-                    <p>PDF preview is ready.</p>
-                    <a className="btn btn-download" href={atsResumeUrl(targetId)} target="_blank" rel="noopener noreferrer">
-                      Click to View / Download 1-Page Resume PDF
-                    </a>
-                  </div>
-                </iframe>
-              </object>
-            </div>
+                  <iframe
+                    title="1-Page ATS Resume PDF Preview"
+                    src={`${atsResumeUrl(targetId)}#toolbar=0&navpanes=0&view=FitH`}
+                    className="resume-pdf-iframe"
+                    loading="lazy"
+                  >
+                    <div className="pdf-fallback-msg" style={{ padding: "24px", textAlign: "center", color: "#fff" }}>
+                      <p style={{ marginBottom: "12px", fontSize: "1rem" }}>
+                        📱 Your mobile browser does not render inline PDF frames.
+                      </p>
+                      <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => setPreviewMode("doc")}
+                        >
+                          📱 Switch to Mobile Document View
+                        </button>
+                        <a
+                          className="btn btn-download"
+                          href={atsResumeUrl(targetId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          ↗ Open in Native PDF Viewer
+                        </a>
+                      </div>
+                    </div>
+                  </iframe>
+                </object>
+              </div>
+            )}
           </div>
         )}
 
@@ -603,6 +687,17 @@ export default function ResumeAnalysisReport({ data }) {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button
             type="button"
+            className="btn btn-primary glow-btn"
+            onClick={() => {
+              setTab("resume_preview");
+              setShowModalPreview(true);
+            }}
+            title="Open full-screen mobile ATS resume preview"
+          >
+            🔍 Fullscreen Mobile Preview
+          </button>
+          <button
+            type="button"
             className="btn btn-secondary glow-btn"
             onClick={() => {
               setTab("resume_preview");
@@ -640,6 +735,15 @@ export default function ResumeAnalysisReport({ data }) {
           </a>
         </div>
       </div>
+
+      {/* Fullscreen Mobile Resume Preview Modal */}
+      <MobilePreviewModal
+        isOpen={showModalPreview}
+        onClose={() => setShowModalPreview(false)}
+        resumeData={resumeData}
+        fallbackData={data}
+        targetId={targetId}
+      />
     </article>
   );
 }

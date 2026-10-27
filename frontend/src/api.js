@@ -20,3 +20,4 @@ export const pdfUrl = (id) => `${API_BASE_URL}/api/report/${id}/pdf`;
 export const atsResumeUrl = (id) => `${API_BASE_URL}/api/report/${id}/ats-resume`;
 export const validationUrl = (id) => `${API_BASE_URL}/api/report/${id}/validation`;
 export const getPdfValidation = (id) => fetch(`${API_BASE_URL}/api/report/${id}/validation`).then(handle);
+export const getResumeData = (id) => fetch(`${API_BASE_URL}/api/report/${id}/resume-data`).then(handle);

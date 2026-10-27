@@ -169,6 +169,27 @@ def pdf_validation(i: int):
     val_report = one_page_ats_resume.validate_ats_pdf(buf.getvalue(), parsed)
     return val_report
 
+@app.get("/api/report/{i}/resume-data")
+def resume_data(i: int):
+    r = db.get(i)
+    if not r:
+        items = db.list_all()
+        if items:
+            r = db.get(items[0]["id"])
+    if not r:
+        raise HTTPException(404, "Analysis not found. Please analyze a resume first.")
+    import one_page_ats_resume
+    raw_text = r.get("result", {}).get("_raw_text", "")
+    parsed = one_page_ats_resume.extract_resume_sections(raw_text)
+    return {
+        "id": i,
+        "job_title": r.get("job_title", "") or r.get("result", {}).get("job_title", "Target Role"),
+        "parsed_resume": parsed,
+        "matched_skills": r.get("result", {}).get("matched_skills", []),
+        "all_skills": r.get("result", {}).get("skills", []),
+        "ats_score": r.get("result", {}).get("ats_score", 95)
+    }
+
 @app.get("/api/report/{i}/pdf")
 def pdf(i: int, download: bool = False):
     r = db.get(i)
