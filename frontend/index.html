@@ -34,7 +34,24 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="pre-init-loader" style="position:fixed;inset:0;background:#070a14;display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;z-index:999999;">
+        <div style="background:rgba(14,20,36,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:2.5rem 2rem;display:flex;flex-direction:column;align-items:center;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.5);max-width:380px;width:90%;">
+          <div style="width:64px;height:64px;border-radius:50%;background:rgba(22,30,54,0.8);border:1px solid rgba(6,182,212,0.4);display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:1.25rem;">🎯</div>
+          <div style="font-size:1.5rem;font-weight:800;font-family:'Outfit',sans-serif;background:linear-gradient(135deg,#ec4899,#a855f7,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.35rem;">ResumeMatch AI</div>
+          <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:1.25rem;">ATS Keyword Matching & Diagnostics</div>
+          <div style="width:160px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;overflow:hidden;position:relative;">
+            <div style="position:absolute;top:0;bottom:0;width:50%;background:linear-gradient(90deg,#ec4899,#a855f7,#06b6d4);border-radius:9999px;animation:preLoaderSlide 1.2s infinite ease-in-out;"></div>
+          </div>
+        </div>
+      </div>
+      <style>
+        @keyframes preLoaderSlide {
+          0% { left: -50%; }
+          100% { left: 100%; }
+        }
+      </style>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

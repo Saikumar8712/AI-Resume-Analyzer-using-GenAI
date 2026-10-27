@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import UploadForm from "./components/UploadForm.jsx";
 import ResumeAnalysisReport from "./components/ResumeAnalysisReport.jsx";
 import History from "./components/History.jsx";
+import LoadingScreen from "./components/LoadingScreen.jsx";
 import * as api from "./api.js";
 
 export default function App() {
@@ -10,6 +11,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [backendOnline, setBackendOnline] = useState(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFadingOut, setIsFadingOut] = useState(false);
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("resume_theme") || "dark";
   });
@@ -34,7 +37,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refreshHistory();
+    let mounted = true;
+    const startTime = Date.now();
+    const MIN_LOAD_TIME = 1000; // Keep icon and loading screen visible for at least 1.0 sec
+    const MAX_LOAD_TIME = 2500; // Stay up to 2.5 sec maximum
+
+    // Safety timeout ensures user is never stuck for more than 2.5 sec
+    const safetyTimer = setTimeout(() => {
+      if (mounted) finish();
+    }, MAX_LOAD_TIME);
+
+    refreshHistory().finally(() => {
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, MIN_LOAD_TIME - elapsed);
+      // Ensure at least 1.0 sec icon display time, up to 2.5 sec
+      setTimeout(() => {
+        if (mounted) finish();
+      }, remainingTime);
+    });
+
+    let finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      setIsFadingOut(true);
+      // Smooth 1.0s load-out fade transition
+      setTimeout(() => {
+        if (mounted) setInitialLoading(false);
+      }, 1000);
+    }
+
+    return () => {
+      mounted = false;
+      clearTimeout(safetyTimer);
+    };
   }, [refreshHistory]);
 
   const run = async (file, jd, title) => {
@@ -74,7 +110,9 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <>
+      {initialLoading && <LoadingScreen isFading={isFadingOut} />}
+      <div className="app-container">
       <header className="top-nav">
         <div className="nav-brand">
           <div className="brand-logo">🎯</div>
@@ -175,5 +213,6 @@ export default function App() {
         </section>
       </main>
     </div>
+    </>
   );
 }

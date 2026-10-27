@@ -266,8 +266,8 @@ button, input, textarea, a, .tab-btn, .chip-btn {
 
 .brand-logo {
   font-size: 2rem;
-  width: 48px;
-  height: 48px;
+  width: 50px;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -276,14 +276,50 @@ button, input, textarea, a, .tab-btn, .chip-btn {
   background-image: linear-gradient(var(--surface-elevated), var(--surface-elevated)), linear-gradient(135deg, #ec4899, #8b5cf6 50%, #06b6d4);
   background-origin: border-box;
   background-clip: padding-box, border-box;
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: 0 4px 18px rgba(236, 72, 153, 0.22), 0 2px 10px rgba(168, 85, 247, 0.22);
-  animation: logoPulse 4s ease-in-out infinite alternate;
+  animation: brandFloat 3.8s ease-in-out infinite;
+  cursor: pointer;
+  user-select: none;
+  /* Smooth 0.8s hover transition */
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.8s ease, filter 0.8s ease;
+  position: relative;
+  will-change: transform, box-shadow;
 }
 
-@keyframes logoPulse {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.03); }
+.brand-logo:hover {
+  transform: translateY(-5px) scale(1.15) rotate(9deg);
+  box-shadow: 0 12px 36px rgba(6, 182, 212, 0.5), 0 0 26px rgba(236, 72, 153, 0.6);
+  filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.6));
+  /* Dynamic 1.4s continuous hover animation */
+  animation: brandHoverPulse 1.4s ease-in-out infinite alternate;
+}
+
+.brand-logo:active {
+  transform: translateY(0) scale(0.95);
+  transition-duration: 0.15s;
+}
+
+@keyframes brandHoverPulse {
+  0% {
+    transform: translateY(-5px) scale(1.13) rotate(7deg);
+    box-shadow: 0 10px 30px rgba(6, 182, 212, 0.45), 0 0 20px rgba(236, 72, 153, 0.5);
+  }
+  100% {
+    transform: translateY(-7px) scale(1.18) rotate(11deg);
+    box-shadow: 0 16px 42px rgba(6, 182, 212, 0.6), 0 0 32px rgba(236, 72, 153, 0.7);
+  }
+}
+
+@keyframes brandFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+    box-shadow: 0 4px 18px rgba(236, 72, 153, 0.22), 0 2px 10px rgba(6, 182, 212, 0.22);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-3deg);
+    box-shadow: 0 10px 28px rgba(6, 182, 212, 0.35), 0 0 18px rgba(236, 72, 153, 0.35);
+  }
 }
 
 .brand-title {
@@ -664,13 +700,30 @@ button, input, textarea, a, .tab-btn, .chip-btn {
 }
 
 .drop-icon {
-  font-size: 2.2rem;
+  font-size: 2.3rem;
   margin-bottom: 0.5rem;
-  transition: transform 0.2s;
+  display: inline-block;
+  /* Smooth 0.75s hover transition */
+  transition: transform 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.75s ease;
+  animation: dropIconHoverFloat 3.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes dropIconHoverFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-4px) rotate(-2deg); }
 }
 
 .drop:hover .drop-icon {
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-7px) scale(1.22) rotate(-6deg);
+  filter: drop-shadow(0 8px 16px rgba(6, 182, 212, 0.45));
+  /* Continuous 1.3s hover float */
+  animation: dropIconActiveHover 1.3s ease-in-out infinite alternate;
+}
+
+@keyframes dropIconActiveHover {
+  0% { transform: translateY(-6px) scale(1.2) rotate(-5deg); }
+  100% { transform: translateY(-9px) scale(1.25) rotate(-8deg); }
 }
 
 .drop-prompt {
@@ -3575,4 +3628,337 @@ button, input, textarea, a, .tab-btn, .chip-btn {
     margin-left: -0.9rem;
   }
 }
+
+/* ==========================================================================
+   PREMIUM APP INITIAL LOADING SCREEN
+   Matches ResumeMatch AI branding, typography, glassmorphism & color palette.
+   ========================================================================== */
+
+.app-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background-color: var(--bg-primary);
+  background-image: var(--bg-pattern);
+  background-size: var(--bg-pattern-size);
+  background-attachment: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  opacity: 1;
+  transform: scale(1);
+  /* 1.0s smooth load-out transition */
+  transition: opacity 1.0s cubic-bezier(0.4, 0, 0.2, 1), transform 1.0s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.app-loading-overlay.fade-out {
+  opacity: 0;
+  transform: scale(1.03);
+  pointer-events: none;
+}
+
+.app-loading-overlay.fade-out .loading-card {
+  transform: translateY(-10px) scale(0.97);
+  opacity: 0;
+  transition: transform 1.0s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.9s ease;
+}
+
+.app-loading-overlay.fade-out .loading-brand-icon {
+  transform: scale(0.88) translateY(-8px);
+  filter: blur(2px);
+  opacity: 0.2;
+  transition: all 1.0s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ambient Radial Glow */
+.loading-ambient-glow {
+  position: absolute;
+  width: 440px;
+  height: 440px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.16) 0%, rgba(168, 85, 247, 0.12) 45%, transparent 70%);
+  filter: blur(50px);
+  pointer-events: none;
+  animation: ambientFloat 6s ease-in-out infinite alternate;
+}
+
+/* Central Glassmorphic Loading Card */
+.loading-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 2.5rem 2rem 2.2rem;
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;
+  animation: cardEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.loading-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: var(--border-accent-gradient);
+}
+
+/* Animated Brand Logo with Radar, Ring Shimmer, and Interactive Hover */
+.loading-logo-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.35rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Expanding Radar Wave */
+.loading-radar-wave {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(6, 182, 212, 0.6);
+  opacity: 0;
+  animation: radarWave 2.6s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  pointer-events: none;
+}
+
+/* Concentric Gradient Shimmer Ring */
+.loading-ring-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  background: linear-gradient(135deg, #06b6d4, #a855f7, #ec4899, #10b981) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ringSpin 3.2s linear infinite;
+  transition: filter 0.35s ease, transform 0.35s ease;
+}
+
+/* Main Loading Brand Icon */
+.loading-brand-icon {
+  width: 66px;
+  height: 66px;
+  background: var(--surface-elevated);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  box-shadow: 0 8px 26px rgba(6, 182, 212, 0.3);
+  animation: logoLevitate 3s ease-in-out infinite;
+  /* Smooth 0.85s hover transition */
+  transition: transform 0.85s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.85s ease, border-color 0.85s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.loading-icon-target {
+  display: inline-block;
+  /* 0.8s rotation/scale transition */
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Dynamic Hover Effects calibrated to 0.5s - 1.5s range */
+.loading-logo-wrapper:hover .loading-brand-icon {
+  transform: translateY(-6px) scale(1.18);
+  box-shadow: 0 18px 44px rgba(6, 182, 212, 0.6), 0 0 32px rgba(236, 72, 153, 0.55);
+  border-color: var(--cyan);
+  /* 1.4s ongoing hover pulse animation */
+  animation: loadingHoverPulse 1.4s ease-in-out infinite alternate;
+}
+
+.loading-logo-wrapper:hover .loading-icon-target {
+  transform: rotate(-16deg) scale(1.16);
+}
+
+.loading-logo-wrapper:hover .loading-ring-pulse {
+  /* Exactly 1.4s rotation cycle on hover */
+  animation-duration: 1.4s;
+  filter: drop-shadow(0 0 14px rgba(6, 182, 212, 0.9));
+}
+
+.loading-logo-wrapper:active .loading-brand-icon {
+  transform: translateY(0) scale(0.96);
+  transition-duration: 0.15s;
+}
+
+@keyframes loadingHoverPulse {
+  0% {
+    transform: translateY(-5px) scale(1.15);
+    box-shadow: 0 16px 40px rgba(6, 182, 212, 0.55), 0 0 28px rgba(236, 72, 153, 0.5);
+  }
+  100% {
+    transform: translateY(-8px) scale(1.2);
+    box-shadow: 0 22px 50px rgba(6, 182, 212, 0.7), 0 0 38px rgba(236, 72, 153, 0.65);
+  }
+}
+
+/* Typography */
+.loading-text-group {
+  margin-bottom: 1.5rem;
+}
+
+.loading-brand-title {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.35rem;
+}
+
+.loading-brand-subtitle {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Elegant Animated Progress Track */
+.loading-progress-container {
+  width: 220px;
+  height: 4px;
+  background: var(--surface-input);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border-subtle);
+}
+
+.loading-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(90deg, #ec4899, #a855f7, #06b6d4, #10b981);
+  border-radius: 9999px;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+  animation: progressGlide 1.6s ease-in-out infinite;
+}
+
+/* Status Pill */
+.loading-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  padding: 0.35rem 0.85rem;
+}
+
+.loading-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.loading-status-text {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Animations */
+@keyframes ambientFloat {
+  0% { transform: translate(-20px, -20px) scale(0.95); opacity: 0.7; }
+  100% { transform: translate(20px, 20px) scale(1.08); opacity: 1; }
+}
+
+@keyframes cardEnter {
+  0% { transform: translateY(16px) scale(0.97); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes ringSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes radarWave {
+  0% { transform: scale(0.8); opacity: 0.9; }
+  50% { opacity: 0.45; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes logoLevitate {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    box-shadow: 0 8px 24px rgba(6, 182, 212, 0.25);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.04);
+    box-shadow: 0 16px 36px rgba(168, 85, 247, 0.38), 0 0 20px rgba(6, 182, 212, 0.32);
+  }
+}
+
+@keyframes progressGlide {
+  0% { left: -45%; }
+  50% { left: 40%; }
+  100% { left: 100%; }
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Mobile Responsiveness for Loading Screen */
+@media (max-width: 480px) {
+  .loading-card {
+    padding: 2rem 1.25rem 1.8rem;
+    max-width: 90vw;
+  }
+  .loading-logo-wrapper {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 1rem;
+  }
+  .loading-brand-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 1.6rem;
+  }
+  .loading-brand-title {
+    font-size: 1.35rem;
+  }
+  .loading-brand-subtitle {
+    font-size: 0.78rem;
+  }
+  .loading-progress-container {
+    width: 180px;
+  }
+  .loading-status-text {
+    font-size: 0.72rem;
+  }
+}
+
 
