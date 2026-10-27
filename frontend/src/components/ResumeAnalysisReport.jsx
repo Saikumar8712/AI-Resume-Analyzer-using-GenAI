@@ -276,7 +276,7 @@ export default function ResumeAnalysisReport({ data }) {
 
         {/* 3. Dedicated Responsive 1-Page Resume Preview & PDF Audit (Requirement A, E, F) */}
         {tab === "resume_preview" && (
-          <div className="resume-preview-container">
+          <div id="resume-preview-section" className="resume-preview-container">
             <div className="section-intro-card">
               <div className="intro-header flex-between">
                 <div>
@@ -606,8 +606,10 @@ export default function ResumeAnalysisReport({ data }) {
             className="btn btn-secondary glow-btn"
             onClick={() => {
               setTab("resume_preview");
-              const el = document.querySelector(".report-tabs-nav");
-              if (el) el.scrollIntoView({ behavior: "smooth" });
+              setTimeout(() => {
+                const target = document.querySelector("#resume-preview-section") || document.querySelector(".tabs-bar");
+                if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 40);
             }}
           >
             👁️ Preview 1-Page Resume
